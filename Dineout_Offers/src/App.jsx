@@ -18,13 +18,6 @@ const getBaseCardName = (name) => {
   return name.replace(/\s*\([^)]*\)$/, '').trim();
 };
 
-// Helper to extract network variant
-const getNetworkVariant = (name) => {
-  if (!name) return '';
-  const match = name.match(/\(([^)]+)\)$/);
-  return match ? match[1] : '';
-};
-
 // Fuzzy matching utility functions
 const levenshteinDistance = (a, b) => {
   if (!a || !b) return 100;
@@ -78,11 +71,14 @@ const CreditCardDropdown = () => {
   const [filteredCards, setFilteredCards] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedCard, setSelectedCard] = useState("");
-  const [pvrOffers, setPvrOffers] = useState([]);
-  const [bookMyShowOffers, setBookMyShowOffers] = useState([]);
-  const [paytmDistrictOffers, setPaytmDistrictOffers] = useState([]);
-  const [movieBenefits, setMovieBenefits] = useState([]);
-  const [expandedOfferIndex, setExpandedOfferIndex] = useState({ pvr: null, bms: null, paytm: null });
+  const [eazydinerOffers, setEazydinerOffers] = useState([]);
+  const [zomatoOffers, setZomatoOffers] = useState([]);
+  const [swiggyOffers, setSwiggyOffers] = useState([]);
+  const [expandedOfferIndex, setExpandedOfferIndex] = useState({ 
+    eazydiner: null, 
+    zomato: null, 
+    swiggy: null 
+  });
   const [showNoCardMessage, setShowNoCardMessage] = useState(false);
   const [typingTimeout, setTypingTimeout] = useState(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
@@ -105,26 +101,21 @@ const CreditCardDropdown = () => {
 
   const getOffersForSelectedCard = (offers) => {
     if (!selectedCard) return [];
+    
     return offers.filter((offer) => {
-      const offerCardName = offer["Credit Card Name"] ? normalizeCardName(offer["Credit Card Name"]) : "";
-      const offerBaseName = getBaseCardName(offerCardName);
-      return offerBaseName.toLowerCase() === selectedCard.toLowerCase();
+      if (!offer["Eligible Credit Cards"]) return false;
+      
+      const eligibleCards = offer["Eligible Credit Cards"]
+        .split(',')
+        .map(card => getBaseCardName(normalizeCardName(card.trim())));
+      
+      return eligibleCards.includes(selectedCard);
     });
   };
 
-  const getMovieBenefitsForSelectedCard = () => {
-    if (!selectedCard) return [];
-    return movieBenefits.filter((offer) => {
-      const offerCardName = offer["Credit Card Name"] ? normalizeCardName(offer["Credit Card Name"]) : "";
-      const offerBaseName = getBaseCardName(offerCardName);
-      return offerBaseName.toLowerCase() === selectedCard.toLowerCase();
-    });
-  };
-
-  const selectedPvrOffers = getOffersForSelectedCard(pvrOffers);
-  const selectedBookMyShowOffers = getOffersForSelectedCard(bookMyShowOffers);
-  const selectedPaytmDistrictOffers = getOffersForSelectedCard(paytmDistrictOffers);
-  const selectedMovieBenefits = getMovieBenefitsForSelectedCard();
+  const selectedEazydinerOffers = getOffersForSelectedCard(eazydinerOffers);
+  const selectedZomatoOffers = getOffersForSelectedCard(zomatoOffers);
+  const selectedSwiggyOffers = getOffersForSelectedCard(swiggyOffers);
 
   const toggleOfferDetails = (type, index) => {
     setExpandedOfferIndex((prev) => ({
@@ -135,17 +126,11 @@ const CreditCardDropdown = () => {
 
   const hasAnyOffers = useCallback(() => {
     return (
-      selectedPvrOffers.length > 0 ||
-      selectedBookMyShowOffers.length > 0 ||
-      selectedPaytmDistrictOffers.length > 0 ||
-      selectedMovieBenefits.length > 0
+      selectedEazydinerOffers.length > 0 ||
+      selectedZomatoOffers.length > 0 ||
+      selectedSwiggyOffers.length > 0
     );
-  }, [
-    selectedPvrOffers,
-    selectedBookMyShowOffers,
-    selectedPaytmDistrictOffers,
-    selectedMovieBenefits,
-  ]);
+  }, [selectedEazydinerOffers, selectedZomatoOffers, selectedSwiggyOffers]);
 
   const handleScrollDown = () => {
     window.scrollTo({
@@ -157,41 +142,48 @@ const CreditCardDropdown = () => {
   useEffect(() => {
     const fetchCSVData = async () => {
       try {
-        const [pvrResponse, bmsResponse, paytmResponse, benefitsResponse, allCardsResponse] = await Promise.all([
-          axios.get("/PVR.csv"),
-          axios.get("/Bookmyshow.csv"),
-          axios.get("/Paytm and District.csv"),
-          axios.get("/Permanent offers.csv"),
+        const [eazydinerResponse, zomatoResponse, swiggyResponse, allCardsResponse] = await Promise.all([
+          axios.get("/Eazydiner.csv"),
+          axios.get("/Zomato.csv"),
+          axios.get("/Swiggy.csv"),
           axios.get("/All Cards.csv")
         ]);
 
-        const pvrData = Papa.parse(pvrResponse.data, { header: true });
-        const bmsData = Papa.parse(bmsResponse.data, { header: true });
-        const paytmData = Papa.parse(paytmResponse.data, { header: true });
-        const benefitsData = Papa.parse(benefitsResponse.data, { header: true });
+        const eazydinerData = Papa.parse(eazydinerResponse.data, { header: true });
+        const zomatoData = Papa.parse(zomatoResponse.data, { header: true });
+        const swiggyData = Papa.parse(swiggyResponse.data, { header: true });
         const allCardsParsed = Papa.parse(allCardsResponse.data, { header: true });
 
-        setPvrOffers(pvrData.data);
-        setBookMyShowOffers(bmsData.data);
-        setPaytmDistrictOffers(paytmData.data);
-        setMovieBenefits(benefitsData.data);
+        setEazydinerOffers(eazydinerData.data);
+        setZomatoOffers(zomatoData.data);
+        setSwiggyOffers(swiggyData.data);
 
         const baseCardSet = new Set();
 
-        const processCSV = (data) => {
+        // Process All Cards CSV
+        allCardsParsed.data.forEach(row => {
+          if (row["Eligible Credit Cards"]) {
+            const baseName = getBaseCardName(normalizeCardName(row["Eligible Credit Cards"]));
+            baseCardSet.add(baseName);
+          }
+        });
+
+        // Process other CSVs
+        const processOtherCSV = (data) => {
           data.forEach(row => {
-            if (row["Credit Card Name"]) {
-              const baseName = getBaseCardName(normalizeCardName(row["Credit Card Name"]));
-              baseCardSet.add(baseName);
+            if (row["Eligible Credit Cards"]) {
+              const cards = row["Eligible Credit Cards"].split(',');
+              cards.forEach(card => {
+                const baseName = getBaseCardName(normalizeCardName(card.trim()));
+                baseCardSet.add(baseName);
+              });
             }
           });
         };
 
-        processCSV(allCardsParsed.data);
-        processCSV(pvrData.data);
-        processCSV(bmsData.data);
-        processCSV(paytmData.data);
-        processCSV(benefitsData.data);
+        processOtherCSV(eazydinerData.data);
+        processOtherCSV(zomatoData.data);
+        processOtherCSV(swiggyData.data);
 
         setCreditCards(Array.from(baseCardSet).sort());
       } catch (error) {
@@ -255,13 +247,11 @@ const CreditCardDropdown = () => {
     setSelectedCard(card);
     setQuery(card);
     setFilteredCards([]);
-    setExpandedOfferIndex({ pvr: null, bms: null, paytm: null });
+    setExpandedOfferIndex({ eazydiner: null, zomato: null, swiggy: null });
     setShowNoCardMessage(false);
     if (typingTimeout) clearTimeout(typingTimeout);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
-
-  // ... rest of your JSX rendering (same as your original) ...
 
   return (
     <div className="App">
@@ -380,215 +370,157 @@ const CreditCardDropdown = () => {
 
         {selectedCard && hasAnyOffers() && (
           <div className="offer-section">
-            {selectedMovieBenefits.length > 0 && (
+            {selectedEazydinerOffers.length > 0 && (
               <div className="offer-container">
-                <h2 style={{ margin: "20px 0" }}>Permanent Offers</h2>
+                <h2 style={{ margin: "20px 0" }}>Offers on Eazydiner</h2>
                 <div className="offer-row">
-                  {selectedMovieBenefits.map((benefit, index) => {
-                    const cardName = normalizeCardName(benefit["Credit Card Name"] || "");
-                    const network = getNetworkVariant(cardName);
-                    
-                    return (
-                      <div key={`benefit-${index}`} className="offer-card">
-                        {benefit.image && (
-                          <img 
-                            src={benefit.image} 
-                            alt={cardName || "Card Offer"} 
-                            className="benefit-image"
-                          />
-                        )}
-                        
-                        {benefit["Movie Benefit"] && <p><strong>Benefit:</strong> {benefit["Movie Benefit"]}</p>}
-                        {network && (
-                          <p className="network-note">
-                            <strong>Note:</strong> This benefit is applicable only on {network} variant
-                          </p>
-                        )}
-                        <p> <strong> This is a inbuilt feature of this credit card </strong></p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {selectedPvrOffers.length > 0 && (
-              <div className="offer-container">
-                <h2>Offers on both PVR and INOX</h2>
-                <div className="offer-row">
-                  {selectedPvrOffers.map((offer, index) => {
-                    const cardName = normalizeCardName(offer["Credit Card Name"] || "");
-                    const network = getNetworkVariant(cardName);
-                    
-                    return (
-                      <div 
-                        key={`pvr-${index}`} 
-                        className={`offer-card ${expandedOfferIndex.pvr === index ? 'expanded' : ''}`}
-                      >
-                        {offer["Image URL"] && (
-                          <img 
-                            src={offer["Image URL"]} 
-                            alt={offer["Offer Title"] || "PVR Offer"} 
-                            className="offer-image"
-                          />
-                        )}
-                        <h3>{offer["Offer Title"] || "PVR Offer"}</h3>
-                        {network && (
+                  {selectedEazydinerOffers.map((offer, index) => (
+                    <div 
+                      key={`eazydiner-${index}`} 
+                      className={`offer-card ${expandedOfferIndex.eazydiner === index ? 'expanded' : ''}`}
+                    >
+                      {network && (
                           <p className="network-note">
                             <strong>Note:</strong> This offer is applicable only on {network} variant
                           </p>
                         )}
-                        {offer["Validity Date"] && <p><strong>Validity:</strong> {offer["Validity Date"]}</p>}
-                        {offer["Coupn Code"] && (
-                          <p>
-                            <span role="img" aria-label="important" style={{ marginRight: "5px" }}>⚠️</span>
-                            <strong>Important:</strong> {offer["Coupn Code"]}
-                          </p>
-                        )}
-                        
-                        <button 
-                          onClick={() => toggleOfferDetails("pvr", index)}
-                          className={`details-btn ${expandedOfferIndex.pvr === index ? "active" : ""}`}
-                        >
-                          {expandedOfferIndex.pvr === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
-                        </button>
-                        
-                        <div className={`terms-container ${expandedOfferIndex.pvr === index ? 'visible' : ''}`}>
-                          <div className="terms-content">
-                            <p>{offer["Terms and Conditions"]}</p>
-                          </div>
+                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      
+                      <button 
+                        onClick={() => toggleOfferDetails("eazydiner", index)}
+                        className={`details-btn ${expandedOfferIndex.eazydiner === index ? "active" : ""}`}
+                      >
+                        {expandedOfferIndex.eazydiner === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
+                      </button>
+                      
+                      <div className={`terms-container ${expandedOfferIndex.eazydiner === index ? 'visible' : ''}`}>
+                        <div className="terms-content">
+                          {offer["Terms and Conditions"] && <p>{offer["Terms and Conditions"]}</p>}
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {selectedBookMyShowOffers.length > 0 && (
+            {selectedZomatoOffers.length > 0 && (
               <div className="offer-container">
-                <h2>Offers on BookMyShow</h2>
+                <h2>Offers on Zomato</h2>
                 <div className="offer-row">
-                  {selectedBookMyShowOffers.map((offer, index) => {
-                    const cardName = normalizeCardName(offer["Credit Card Name"] || "");
-                    const network = getNetworkVariant(cardName);
-                    
-                    return (
-                      <div 
-                        key={`bms-${index}`} 
-                        className="offer-card"
-                      >
-                        {offer["Offer Image Link"] && (
-                          <img 
-                            src={offer["Offer Image Link"]} 
-                            alt={"BookMyShow Offer"} 
-                            className="offer-image"
-                          />
-                        )}
-                        
-                        {offer["Offer Description"] && <p><strong>Description:</strong> {offer["Offer Description"]}</p>}
-                        {offer["Validity of Offer"] && <p><strong>Validity:</strong> {offer["Validity of Offer"]}</p>}
-                        {network && (
+                  {selectedZomatoOffers.map((offer, index) => (
+                    <div 
+                      key={`zomato-${index}`} 
+                      className={`offer-card ${expandedOfferIndex.zomato === index ? 'expanded' : ''}`}
+                    >
+                      {network && (
                           <p className="network-note">
                             <strong>Note:</strong> This offer is applicable only on {network} variant
                           </p>
                         )}
-                        {offer["Offer Link"] && (
-                          <a 
-                            href={offer["Offer Link"]} 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="offer-link"
+                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      
+                      {offer["Coupon Code"] && (
+                        <div className="promo-code-container">
+                          <strong>Coupon Code: </strong>
+                          <span className="promo-code">
+                            {offer["Coupon Code"]}
+                          </span>
+                          <div 
+                            onClick={() => copyToClipboard(offer["Coupon Code"])}
+                            className="copy-button"
+                            title="Copy to clipboard"
                           >
-                            <button className="view-details-btn">
-                              Click for more details
-                            </button>
-                          </a>
-                        )}
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <button 
+                        onClick={() => toggleOfferDetails("zomato", index)}
+                        className={`details-btn ${expandedOfferIndex.zomato === index ? "active" : ""}`}
+                      >
+                        {expandedOfferIndex.zomato === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
+                      </button>
+                      
+                      <div className={`terms-container ${expandedOfferIndex.zomato === index ? 'visible' : ''}`}>
+                        <div className="terms-content">
+                          {offer["Terms and Conditions"] && <p>{offer["Terms and Conditions"]}</p>}
+                        </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
 
-            {selectedPaytmDistrictOffers.length > 0 && (
+            {selectedSwiggyOffers.length > 0 && (
               <div className="offer-container">
-                <h2>Offers on Paytm and District</h2>
+                <h2>Offers on Swiggy</h2>
                 <div className="offer-row">
-                  {selectedPaytmDistrictOffers.map((offer, index) => {
-                    const cardName = normalizeCardName(offer["Credit Card Name"] || "");
-                    const network = getNetworkVariant(cardName);
-                    
-                    return (
-                      <div 
-                        key={`paytm-${index}`} 
-                        className={`offer-card ${expandedOfferIndex.paytm === index ? 'expanded' : ''}`}
-                      >
-                        {offer["Offer Image Link"] && (
-                          <img 
-                            src={offer["Offer Image Link"]} 
-                            alt={"Paytm & District Offer"} 
-                            className="offer-image"
-                          />
-                        )}
-                        <h3>{offer["Offer title"] || "Paytm & District Offer"}</h3>
-                        {network && (
+                  {selectedSwiggyOffers.map((offer, index) => (
+                    <div 
+                      key={`swiggy-${index}`} 
+                      className={`offer-card ${expandedOfferIndex.swiggy === index ? 'expanded' : ''}`}
+                    >
+                      {network && (
                           <p className="network-note">
                             <strong>Note:</strong> This offer is applicable only on {network} variant
                           </p>
                         )}
-                        {offer["Offer description"] && <p><strong>Description:</strong> {offer["Offer description"]}</p>}
-                        
-                        {offer["Promo code"] && (
-                          <div className="promo-code-container">
-                            <strong>Promo Code: </strong>
-                            <span className="promo-code">
-                              {offer["Promo code"]}
-                            </span>
-                            <div 
-                              onClick={() => copyToClipboard(offer["Promo code"])}
-                              className="copy-button"
-                              title="Copy to clipboard"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                              </svg>
-                            </div>
-                          </div>
-                        )}
-                        
-                        <button 
-                          onClick={() => toggleOfferDetails("paytm", index)}
-                          className={`details-btn ${expandedOfferIndex.paytm === index ? "active" : ""}`}
-                        >
-                          {expandedOfferIndex.paytm === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
-                        </button>
-                        
-                        <div className={`terms-container ${expandedOfferIndex.paytm === index ? 'visible' : ''}`}>
-                          <div className="terms-content">
-                            <p>{offer["Offer details"]}</p>
+                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      
+                      {offer["Coupon Code"] && (
+                        <div className="promo-code-container">
+                          <strong>Coupon Code: </strong>
+                          <span className="promo-code">
+                            {offer["Coupon Code"]}
+                          </span>
+                          <div 
+                            onClick={() => copyToClipboard(offer["Coupon Code"])}
+                            className="copy-button"
+                            title="Copy to clipboard"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
                           </div>
                         </div>
+                      )}
+                      
+                      <button 
+                        onClick={() => toggleOfferDetails("swiggy", index)}
+                        className={`details-btn ${expandedOfferIndex.swiggy === index ? "active" : ""}`}
+                      >
+                        {expandedOfferIndex.swiggy === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
+                      </button>
+                      
+                      <div className={`terms-container ${expandedOfferIndex.swiggy === index ? 'visible' : ''}`}>
+                        <div className="terms-content">
+                          {offer["Terms and Conditions"] && <p>{offer["Terms and Conditions"]}</p>}
+                        </div>
                       </div>
-                    );
-                  })}
-                     
+                    </div>
+                  ))}
                 </div>
-                
               </div>
-              
             )}
-            
           </div>
-          
         )}
-     
       </div>
-       {selectedCard && !hasAnyOffers() && !showNoCardMessage ? null : (
-        <p className="bottom-disclaimer"> <h3>Disclaimer</h3> All offers, coupons, and discounts listed on our platform are provided for informational purposes only. We do not guarantee the accuracy, availability, or validity of any offer. Users are advised to verify the terms and conditions with the respective merchants before making any purchase. We are not responsible for any discrepancies, expired offers, or losses arising from the use of these coupons.</p>
-     )}
+      {selectedCard && !hasAnyOffers() && !showNoCardMessage ? null : (
+        <p className="bottom-disclaimer">
+          <h3>Disclaimer</h3> 
+          All offers, coupons, and discounts listed on our platform are provided for informational purposes only. 
+          We do not guarantee the accuracy, availability, or validity of any offer. Users are advised to verify 
+          the terms and conditions with the respective merchants before making any purchase. We are not responsible 
+          for any discrepancies, expired offers, or losses arising from the use of these coupons.
+        </p>
+      )}
     </div>
   );
 };

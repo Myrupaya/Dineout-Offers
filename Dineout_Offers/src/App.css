@@ -1,4 +1,767 @@
-h1{
-  color: red;
-  background-color: black;
+/* Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  line-height: 1.6;
+  color: #333;
+  min-height: 100vh;
+  margin: 0;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+body {
+  @apply min-h-screen;
+  background: linear-gradient(135deg, #F8F9FA 3%, #E9ECEF 100%, #CECDC9 100%);
+
+}
+
+.App {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 20px;
+  background: linear-gradient(135deg, #F8F9FA 3%, #E9ECEF 100%, #CECDC9 100%)
+}
+
+/* Typography */
+h1 {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+/* Layout Components */
+.content-container {
+  max-width: 1200px;
+  margin: 2px auto;
+  padding: 20px;
+  background-color: transparent;
+}
+
+.title-box {
+  background-color: white;
+  padding: 2px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.split-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.text-section, .image-section {
+  flex: 1;
+  min-width: 300px;
+}
+
+.image-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.movie-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Search/Dropdown Styles */
+.creditCardDropdown {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  margin: 0 auto 30px;
+}
+
+.creditCardDropdown input {
+  width: 90%;
+  padding: 12px 15px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  transition: border-color 0.3s;
+}
+
+.creditCardDropdown input:focus {
+  outline: none;
+  border-color: #39641D;
+}
+
+.dropdown-heading {
+  font-weight: bold;
+  padding: 10px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Offer Section Styles */
+.offer-section {
+  margin-top: 30px;
+}
+
+.offer-container {
+  margin-bottom: 40px;
+}
+
+.offer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  align-items: stretch; /* Ensures all cards are same height */
+  margin-top: 20px;
+}
+
+.terms-container {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  z-index: 20; /* Higher than card */
+  background: white;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  border-radius: 0 0 8px 8px;
+  margin-bottom: 50px;
+}
+
+.terms-container.visible {
+  max-height: 300px; /* Adjust as needed */
+  opacity: 1;
+}
+
+.terms-content {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 15px;
+  margin-bottom: 50px;
+}
+
+.offer-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1 1 300px;
+  max-width: 350px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-height: 500px; /* Set minimum height to match all cards */
+  position: relative;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.offer-card.expanded {
+  min-height: 500px; /* Keep same height when expanded */
+  z-index: 10;
+}
+.offer-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.offer-card img {
+  width: 100%;
+  height: 140px; /* Fixed image height */
+  object-fit: cover;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+/* Button Styles */
+button, .view-details-btn {
+  padding: 10px 20px;
+  background-color: #1e7145;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+  margin-top: 10px;
+  display: inline-block;
+}
+
+button:hover, .view-details-btn:hover {
+  background-color: #1e7145;
+}
+
+.details-btn {
+  background-color: #1e7145;
+  color: fff;
+}
+
+.details-btn.active {
+  background-color: #1e7145
+}
+
+/* Special Card Styles */
+.offer-card[style*="#39641D"] {
+  color: white;
+}
+
+.offer-card[style*="#39641D"] button {
+  background-color: #1e7145;
+  color: #fff;
+}
+
+.offer-card[style*="#39641D"] button:hover {
+  background-color: #1e7145;
+}
+
+/* Navbar Styles */
+.navbar {
+  background-color: #CDD1C1;
+  padding: 15px 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.logoContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.logo {
+  height: 60px;
+  transition: transform 0.3s;
+}
+
+.logo:hover {
+  transform: scale(1.05);
+}
+
+.linksContainer {
+  display: flex;
+  gap: 20px;
+}
+
+.link {
+  color: #333;
+  text-decoration: none;
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.link:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+}
+
+/* Utility Classes */
+.text-center {
+  text-align: center;
+}
+
+.no-offers-message {
+  text-align: center;
+  margin: 40px 0;
+  font-size: 1.25rem;
+  color: #666;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .split-section {
+    flex-direction: column;
+  }
+  
+  .text-section, .image-section {
+    width: 100%;
+  }
+  
+  .offer-card {
+    flex: 1 1 100%;
+  }
+  
+  .navbar {
+    padding: 10px;
+  }
+  
+  .logo {
+    height: 40px;
+  }
+  
+  .linksContainer {
+    gap: 10px;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .content-container {
+    padding: 15px;
+    margin-top: 2px;
+  }
+  
+  .title-box {
+    padding: 15px;
+  }
+  
+  .offer-card {
+    padding: 15px;
+  }
+  
+  .logoContainer {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .linksContainer {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .creditCardDropdown{
+    width: 90%;
+    
+  max-width: 350px;
+  margin-top: 2px;
+  }
+  .creditCardDropdown input{
+    width: 90%;
+    
+  max-width: 350px;
+  margin-top: 2px;
+  }
+}
+ .bottom-disclaimer{text-align: center;
+          padding: 20px;
+          max-width: 1000px;
+          margin: 0 auto;}
+
+   /* Base Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Arial', sans-serif;
+  line-height: 1.6;
+  color: #333;
+  min-height: 100vh;
+  margin: 0;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+body {
+  @apply min-h-screen;
+  background: linear-gradient(135deg, #F8F9FA 3%, #E9ECEF 100%, #CECDC9 100%);
+
+}
+
+.App {
+  width: 100%;
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 20px;
+  background: linear-gradient(135deg, #F8F9FA 3%, #E9ECEF 100%, #CECDC9 100%)
+}
+
+/* Typography */
+h1 {
+  font-size: 2.5rem;
+  color: #333;
+  margin-bottom: 1rem;
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+  color: #333;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+/* Layout Components */
+.content-container {
+  max-width: 1200px;
+  margin: 2px auto;
+  padding: 20px;
+  background-color: transparent;
+}
+
+.title-box {
+  background-color: white;
+  padding: 2px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.split-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 30px;
+  margin-bottom: 30px;
+}
+
+.text-section, .image-section {
+  flex: 1;
+  min-width: 300px;
+}
+
+.image-section {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.movie-image {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Search/Dropdown Styles */
+.creditCardDropdown {
+  position: relative;
+  width: 90%;
+  max-width: 500px;
+  margin: 0 auto 30px;
+}
+
+.creditCardDropdown input {
+  width: 90%;
+  padding: 12px 15px;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  transition: border-color 0.3s;
+}
+
+.creditCardDropdown input:focus {
+  outline: none;
+  border-color: #39641D;
+}
+
+.dropdown-heading {
+  font-weight: bold;
+  padding: 10px;
+  background-color: #f0f0f0;
+  border-bottom: 1px solid #ddd;
+}
+
+/* Offer Section Styles */
+.offer-section {
+  margin-top: 30px;
+}
+
+.offer-container {
+  margin-bottom: 40px;
+}
+
+.offer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 20px;
+  align-items: stretch; /* Ensures all cards are same height */
+  margin-top: 20px;
+}
+
+.terms-container {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  opacity: 0;
+  z-index: 20; /* Higher than card */
+  background: white;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+  border-radius: 0 0 8px 8px;
+  margin-bottom: 50px;
+}
+
+.terms-container.visible {
+  max-height: 300px; /* Adjust as needed */
+  opacity: 1;
+}
+
+.terms-content {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 15px;
+  margin-bottom: 50px;
+}
+
+.offer-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1 1 300px;
+  max-width: 350px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-height: 500px; /* Set minimum height to match all cards */
+  position: relative;
+  transition: transform 0.3s, box-shadow 0.3s;
+}
+
+.offer-card.expanded {
+  min-height: 500px; /* Keep same height when expanded */
+  z-index: 10;
+}
+.offer-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+}
+
+.offer-card img {
+  width: 100%;
+  height: 140px; /* Fixed image height */
+  object-fit: cover;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+/* Button Styles */
+button, .view-details-btn {
+  padding: 10px 20px;
+  background-color: #1e7145;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+  margin-top: 10px;
+  display: inline-block;
+}
+
+
+
+.details-btn {
+  background-color: #1e7145;
+  color: white;
+}
+
+
+/* Special Card Styles */
+.offer-card[style*="#39641D"] {
+  color: white;
+}
+
+.offer-card[style*="#39641D"] button {
+  background-color: white;
+  color: #39641D;
+}
+
+.offer-card[style*="#39641D"] button:hover {
+  background-color: #f5f5f5;
+}
+
+/* Navbar Styles */
+.navbar {
+  background-color: #CDD1C1;
+  padding: 15px 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.logoContainer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.logo {
+  height: 60px;
+  transition: transform 0.3s;
+}
+
+.logo:hover {
+  transform: scale(1.05);
+}
+
+.linksContainer {
+  display: flex;
+  gap: 20px;
+}
+
+.link {
+  color: #333;
+  text-decoration: none;
+  font-weight: bold;
+  padding: 5px 10px;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+.link:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+}
+
+/* Utility Classes */
+.text-center {
+  text-align: center;
+}
+
+.no-offers-message {
+  text-align: center;
+  margin: 40px 0;
+  font-size: 1.25rem;
+  color: #666;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .split-section {
+    flex-direction: column;
+  }
+  
+  .text-section, .image-section {
+    width: 100%;
+  }
+  
+  .offer-card {
+    flex: 1 1 100%;
+  }
+  
+  .navbar {
+    padding: 10px;
+  }
+  
+  .logo {
+    height: 40px;
+  }
+  
+  .linksContainer {
+    gap: 10px;
+  }
+  
+  h1 {
+    font-size: 2rem;
+  }
+  
+  h2 {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .content-container {
+    padding: 15px;
+    margin-top: 2px;
+  }
+  
+  .title-box {
+    padding: 15px;
+  }
+  
+  .offer-card {
+    padding: 15px;
+  }
+  
+  .logoContainer {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .linksContainer {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .creditCardDropdown{
+    width: 90%;
+    
+  max-width: 350px;
+  margin-top: 2px;
+  }
+  .creditCardDropdown input{
+    width: 90%;
+    
+  max-width: 350px;
+  margin-top: 2px;
+  }
+}
+ .bottom-disclaimer{text-align: center;
+          padding: 20px;
+          max-width: 1000px;
+          margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+  .bottom-disclaimer {
+    font-size: 14px; /* Adjust as needed */
+  }
+}
+
+       
