@@ -18,6 +18,13 @@ const getBaseCardName = (name) => {
   return name.replace(/\s*\([^)]*\)$/, '').trim();
 };
 
+// Extract network variant from card name
+const getNetworkVariant = (name) => {
+  if (!name) return null;
+  const match = name.match(/\(([^)]+)\)$/);
+  return match ? match[1] : null;
+};
+
 // Fuzzy matching utility functions
 const levenshteinDistance = (a, b) => {
   if (!a || !b) return 100;
@@ -102,15 +109,28 @@ const CreditCardDropdown = () => {
   const getOffersForSelectedCard = (offers) => {
     if (!selectedCard) return [];
     
-    return offers.filter((offer) => {
-      if (!offer["Eligible Credit Cards"]) return false;
-      
-      const eligibleCards = offer["Eligible Credit Cards"]
-        .split(',')
-        .map(card => getBaseCardName(normalizeCardName(card.trim())));
-      
-      return eligibleCards.includes(selectedCard);
-    });
+    return offers
+      .filter(offer => {
+        if (!offer["Eligible Credit Cards"]) return false;
+        
+        return offer["Eligible Credit Cards"]
+          .split(',')
+          .map(card => getBaseCardName(normalizeCardName(card.trim())))
+          .includes(selectedCard);
+      })
+      .map(offer => {
+        // Find the specific card variant that matches the selected card
+        const matchingCard = offer["Eligible Credit Cards"]
+          .split(',')
+          .find(card => 
+            getBaseCardName(normalizeCardName(card.trim())) === selectedCard
+          );
+        
+        return {
+          ...offer,
+          network: getNetworkVariant(matchingCard)
+        };
+      });
   };
 
   const selectedEazydinerOffers = getOffersForSelectedCard(eazydinerOffers);
@@ -379,26 +399,21 @@ const CreditCardDropdown = () => {
                       key={`eazydiner-${index}`} 
                       className={`offer-card ${expandedOfferIndex.eazydiner === index ? 'expanded' : ''}`}
                     >
-                      {network && (
-                          <p className="network-note">
-                            <strong>Note:</strong> This offer is applicable only on {network} variant
-                          </p>
-                        )}
-                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      {offer.network && (
+                        <p className="network-note">
+                          <strong>Note:</strong> This offer is applicable only on {offer.network} variant
+                        </p>
+                      )}
+                      {offer["Offer"] && <h5> <strong>Offer:</strong>{offer["Offer"]}</h5>}
                       
-                      <button 
-                        onClick={() => toggleOfferDetails("eazydiner", index)}
-                        className={`details-btn ${expandedOfferIndex.eazydiner === index ? "active" : ""}`}
-                      >
-                        {expandedOfferIndex.eazydiner === index ? "Hide Terms & Conditions" : "Show Terms & Conditions"}
-                      </button>
+                     
                       
-                      <div className={`terms-container ${expandedOfferIndex.eazydiner === index ? 'visible' : ''}`}>
-                        <div className="terms-content">
-                          {offer["Terms and Conditions"] && <p>{offer["Terms and Conditions"]}</p>}
+                      
+                <div className="terms-contents">
+                          {offer["Terms and Conditions"] && <p> <strong>Terms and Conditions:</strong>{ offer["Terms and Conditions"]}</p>}
                         </div>
                       </div>
-                    </div>
+                   
                   ))}
                 </div>
               </div>
@@ -413,12 +428,12 @@ const CreditCardDropdown = () => {
                       key={`zomato-${index}`} 
                       className={`offer-card ${expandedOfferIndex.zomato === index ? 'expanded' : ''}`}
                     >
-                      {network && (
-                          <p className="network-note">
-                            <strong>Note:</strong> This offer is applicable only on {network} variant
-                          </p>
-                        )}
-                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      {offer.network && (
+                        <p className="network-note">
+                          <strong>Note:</strong> This offer is applicable only on {offer.network} variant
+                        </p>
+                      )}
+                      {offer["Offer"] && <h5> <strong>Offer:</strong>{offer["Offer"]}</h5>}
                       
                       {offer["Coupon Code"] && (
                         <div className="promo-code-container">
@@ -466,12 +481,13 @@ const CreditCardDropdown = () => {
                       key={`swiggy-${index}`} 
                       className={`offer-card ${expandedOfferIndex.swiggy === index ? 'expanded' : ''}`}
                     >
-                      {network && (
-                          <p className="network-note">
-                            <strong>Note:</strong> This offer is applicable only on {network} variant
-                          </p>
-                        )}
-                      {offer["Offer"] && <h3>{offer["Offer"]}</h3>}
+                      {offer.network && (
+                        <p className="network-note">
+                          <strong>Note:</strong> This offer is applicable only on {offer.network} variant
+                        </p>
+                      )}
+                      
+                      {offer["Offer"] && <h5> <strong>Offer:</strong>{offer["Offer"]}</h5>} 
                       
                       {offer["Coupon Code"] && (
                         <div className="promo-code-container">

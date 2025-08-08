@@ -143,27 +143,12 @@ p {
   align-items: stretch; /* Ensures all cards are same height */
   margin-top: 20px;
 }
-
-.terms-container {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.3s ease, opacity 0.3s ease;
-  opacity: 0;
-  z-index: 20; /* Higher than card */
-  background: white;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-  border-radius: 0 0 8px 8px;
+.terms-contents {
+  max-height: 280px;
+  overflow-y: auto;
   margin-bottom: 50px;
 }
 
-.terms-container.visible {
-  max-height: 300px; /* Adjust as needed */
-  opacity: 1;
-}
 
 .terms-content {
   max-height: 280px;
@@ -178,17 +163,17 @@ p {
   justify-content: space-between;
   flex: 1 1 300px;
   max-width: 350px;
-  background-color: #f5f5f5;
+  background-color: black;
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  min-height: 500px; /* Set minimum height to match all cards */
+  min-height: 350px; /* Set minimum height to match all cards */
   position: relative;
   transition: transform 0.3s, box-shadow 0.3s;
 }
 
 .offer-card.expanded {
-  min-height: 500px; /* Keep same height when expanded */
+  min-height: 350px; /* Keep same height when expanded */
   z-index: 10;
 }
 .offer-card:hover {
@@ -521,7 +506,6 @@ p {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 20px;
   align-items: stretch; /* Ensures all cards are same height */
   margin-top: 20px;
 }
@@ -543,7 +527,7 @@ p {
 }
 
 .terms-container.visible {
-  max-height: 300px; /* Adjust as needed */
+  max-height: 350px; /* Adjust as needed */
   opacity: 1;
 }
 
@@ -564,13 +548,13 @@ p {
   border-radius: 8px;
   padding: 20px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  min-height: 500px; /* Set minimum height to match all cards */
+  min-height: 350px; /* Set minimum height to match all cards */
   position: relative;
   transition: transform 0.3s, box-shadow 0.3s;
 }
 
 .offer-card.expanded {
-  min-height: 500px; /* Keep same height when expanded */
+  min-height: 350px; /* Keep same height when expanded */
   z-index: 10;
 }
 .offer-card:hover {
@@ -742,13 +726,12 @@ button, .view-details-btn {
   .creditCardDropdown{
     width: 90%;
     
-  max-width: 350px;
   margin-top: 2px;
   }
   .creditCardDropdown input{
     width: 90%;
     
-  max-width: 350px;
+  max-width: 270px;
   margin-top: 2px;
   }
 }
