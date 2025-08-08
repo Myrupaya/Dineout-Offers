@@ -743,7 +743,7 @@ button, .view-details-btn {
 
         @media (max-width: 768px) {
   .bottom-disclaimer {
-    font-size: 14px; /* Adjust as needed */
+    font-size: 11px; /* Adjust as needed */
   }
 }
 
