@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import Papa from "papaparse";
 import "./App.css";
@@ -81,6 +81,7 @@ const CreditCardDropdown = () => {
   const [eazydinerOffers, setEazydinerOffers] = useState([]);
   const [zomatoOffers, setZomatoOffers] = useState([]);
   const [swiggyOffers, setSwiggyOffers] = useState([]);
+  const [permanentOffers, setPermanentOffers] = useState([]);
   const [expandedOfferIndex, setExpandedOfferIndex] = useState({ 
     eazydiner: null, 
     zomato: null, 
@@ -106,7 +107,7 @@ const CreditCardDropdown = () => {
     });
   };
 
-  const getOffersForSelectedCard = (offers) => {
+  const getOffersForSelectedCard = useCallback((offers) => {
     if (!selectedCard) return [];
     
     return offers
@@ -119,7 +120,6 @@ const CreditCardDropdown = () => {
           .includes(selectedCard);
       })
       .map(offer => {
-        // Find the specific card variant that matches the selected card
         const matchingCard = offer["Eligible Credit Cards"]
           .split(',')
           .find(card => 
@@ -131,11 +131,28 @@ const CreditCardDropdown = () => {
           network: getNetworkVariant(matchingCard)
         };
       });
-  };
+  }, [selectedCard]);
 
-  const selectedEazydinerOffers = getOffersForSelectedCard(eazydinerOffers);
-  const selectedZomatoOffers = getOffersForSelectedCard(zomatoOffers);
-  const selectedSwiggyOffers = getOffersForSelectedCard(swiggyOffers);
+  // Memoize selected offers to prevent unnecessary recalculations
+  const selectedEazydinerOffers = useMemo(() => 
+    getOffersForSelectedCard(eazydinerOffers), 
+    [getOffersForSelectedCard, eazydinerOffers]
+  );
+  
+  const selectedZomatoOffers = useMemo(() => 
+    getOffersForSelectedCard(zomatoOffers), 
+    [getOffersForSelectedCard, zomatoOffers]
+  );
+  
+  const selectedSwiggyOffers = useMemo(() => 
+    getOffersForSelectedCard(swiggyOffers), 
+    [getOffersForSelectedCard, swiggyOffers]
+  );
+  
+  const selectedPermanentOffers = useMemo(() => 
+    getOffersForSelectedCard(permanentOffers), 
+    [getOffersForSelectedCard, permanentOffers]
+  );
 
   const toggleOfferDetails = (type, index) => {
     setExpandedOfferIndex((prev) => ({
@@ -144,13 +161,19 @@ const CreditCardDropdown = () => {
     }));
   };
 
-  const hasAnyOffers = useCallback(() => {
+  const hasAnyOffers = useMemo(() => {
     return (
       selectedEazydinerOffers.length > 0 ||
       selectedZomatoOffers.length > 0 ||
-      selectedSwiggyOffers.length > 0
+      selectedSwiggyOffers.length > 0 ||
+      selectedPermanentOffers.length > 0
     );
-  }, [selectedEazydinerOffers, selectedZomatoOffers, selectedSwiggyOffers]);
+  }, [
+    selectedEazydinerOffers, 
+    selectedZomatoOffers, 
+    selectedSwiggyOffers,
+    selectedPermanentOffers
+  ]);
 
   const handleScrollDown = () => {
     window.scrollTo({
@@ -162,21 +185,37 @@ const CreditCardDropdown = () => {
   useEffect(() => {
     const fetchCSVData = async () => {
       try {
-        const [eazydinerResponse, zomatoResponse, swiggyResponse, allCardsResponse] = await Promise.all([
+        const [
+          eazydinerResponse, 
+          zomatoResponse, 
+          swiggyResponse, 
+          allCardsResponse,
+          permanentResponse
+        ] = await Promise.all([
           axios.get("/Eazydiner.csv"),
           axios.get("/Zomato.csv"),
           axios.get("/Swiggy.csv"),
-          axios.get("/All Cards.csv")
+          axios.get("/All Cards.csv"),
+          axios.get("/Permanent Offers.csv")
         ]);
 
-        const eazydinerData = Papa.parse(eazydinerResponse.data, { header: true });
-        const zomatoData = Papa.parse(zomatoResponse.data, { header: true });
-        const swiggyData = Papa.parse(swiggyResponse.data, { header: true });
-        const allCardsParsed = Papa.parse(allCardsResponse.data, { header: true });
+        // Added config to handle duplicate headers
+        const parseConfig = {
+          header: true,
+          transformHeader: header => header.trim(),
+          skipEmptyLines: true
+        };
+
+        const eazydinerData = Papa.parse(eazydinerResponse.data, parseConfig);
+        const zomatoData = Papa.parse(zomatoResponse.data, parseConfig);
+        const swiggyData = Papa.parse(swiggyResponse.data, parseConfig);
+        const allCardsParsed = Papa.parse(allCardsResponse.data, parseConfig);
+        const permanentData = Papa.parse(permanentResponse.data, parseConfig);
 
         setEazydinerOffers(eazydinerData.data);
         setZomatoOffers(zomatoData.data);
         setSwiggyOffers(swiggyData.data);
+        setPermanentOffers(permanentData.data);
 
         const baseCardSet = new Set();
 
@@ -204,6 +243,7 @@ const CreditCardDropdown = () => {
         processOtherCSV(eazydinerData.data);
         processOtherCSV(zomatoData.data);
         processOtherCSV(swiggyData.data);
+        processOtherCSV(permanentData.data);
 
         setCreditCards(Array.from(baseCardSet).sort());
       } catch (error) {
@@ -215,7 +255,7 @@ const CreditCardDropdown = () => {
   }, []);
 
   useEffect(() => {
-    setShowScrollButton(selectedCard && hasAnyOffers());
+    setShowScrollButton(selectedCard && hasAnyOffers);
   }, [selectedCard, hasAnyOffers]);
 
   const handleInputChange = (event) => {
@@ -382,13 +422,13 @@ const CreditCardDropdown = () => {
           </div>
         )}
 
-        {selectedCard && !hasAnyOffers() && !showNoCardMessage && (
+        {selectedCard && !hasAnyOffers && !showNoCardMessage && (
           <div style={{ textAlign: "center", margin: "40px 0", fontSize: "20px", color: "#666" }}>
             No offers found for {selectedCard}
           </div>
         )}
 
-        {selectedCard && hasAnyOffers() && (
+        {selectedCard && hasAnyOffers && (
           <div className="offer-section">
             {selectedEazydinerOffers.length > 0 && (
               <div className="offer-container">
@@ -525,18 +565,50 @@ const CreditCardDropdown = () => {
                 </div>
               </div>
             )}
+
+            {selectedPermanentOffers.length > 0 && (
+              <div className="offer-container">
+                <h2 style={{ margin: "20px 0" }}>Permanent Offers</h2>
+                <div className="offer-row">
+                  {selectedPermanentOffers.map((offer, index) => (
+                    <div 
+                      key={`permanent-${index}`} 
+                      className="offer-card"
+                    >
+                      {offer.network && (
+                        <p className="network-note">
+                          <strong>Note:</strong> This offer is applicable only on {offer.network} variant
+                        </p>
+                      )}
+                      
+                      {offer["Image"] && (
+                        <div className="offer-image">
+                          <img 
+                            src={offer["Image"]} 
+                            alt={offer["Offer"] || "Credit Card Offer"} 
+                            style={{ maxWidth: "100%",  height:"200px" }}
+                          />
+                        </div>
+                      )}
+                      
+                      {offer["Offer"] && <h5><strong>Offer:</strong> {offer["Offer"]}</h5>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
-      {selectedCard && !hasAnyOffers() && !showNoCardMessage ? null : (
-        <p className="bottom-disclaimer">
-          <h3>Disclaimer</h3> 
+      
+        <div className="bottom-disclaimer"> <h3>Disclaimer</h3> 
+          <p>
           All offers, coupons, and discounts listed on our platform are provided for informational purposes only. 
           We do not guarantee the accuracy, availability, or validity of any offer. Users are advised to verify 
           the terms and conditions with the respective merchants before making any purchase. We are not responsible 
-          for any discrepancies, expired offers, or losses arising from the use of these coupons.
-        </p>
-      )}
+          for any discrepancies, expired offers, or losses arising from the use of these coupons. </p>
+        </div>
+      
     </div>
   );
 };

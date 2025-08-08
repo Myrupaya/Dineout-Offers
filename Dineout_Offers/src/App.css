@@ -734,6 +734,9 @@ button, .view-details-btn {
   max-width: 270px;
   margin-top: 2px;
   }
+  .creditCardDropdown ul{
+    max-width: 270px;
+  }
 }
  .bottom-disclaimer{text-align: center;
           padding: 20px;
