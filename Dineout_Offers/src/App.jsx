@@ -13,13 +13,18 @@ const LIST_FIELDS = {
   desc: ["Description", "Details", "Offer Description", "Flight Benefit"],
   // Permanent (inbuilt) CSV fields
   permanentCCName: ["Eligible Credit Cards"],
-  permanentBenefit: ["Offer", "Benefit", "Offer", "Hotel Benefit"],
+  permanentBenefit: ["Offer", "Benefit", "Grocery Benefits", "Hotel Benefit", "Movie Benefit"],
 };
 
 const MAX_SUGGESTIONS = 50;
 
-/** Variant-note sites */
-const VARIANT_NOTE_SITES = new Set(["Swiggy", "Zomato", "EazyDiner", "Permanent"]);
+/** Sites that should display the red per-card “Applicable only on {variant} variant” note */
+const VARIANT_NOTE_SITES = new Set([
+  "Swiggy",
+  "Zomato",
+  "EazyDiner",
+  "Permanent",
+]);
 
 /** -------------------- HELPERS -------------------- */
 const toNorm = (s) =>
@@ -45,15 +50,6 @@ function firstField(obj, keys) {
   return undefined;
 }
 
-function getCI(obj, key) {
-  if (!obj) return undefined;
-  const target = String(key).toLowerCase();
-  for (const k of Object.keys(obj)) {
-    if (String(k).toLowerCase() === target) return obj[k];
-  }
-  return undefined;
-}
-
 function splitList(val) {
   if (!val) return [];
   return String(val)
@@ -63,17 +59,20 @@ function splitList(val) {
     .filter(Boolean);
 }
 
+/** Strip trailing parentheses: "HDFC Regalia (Visa Signature)" -> "HDFC Regalia" */
 function getBase(name) {
   if (!name) return "";
   return String(name).replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
+/** Variant if present at end-in-parens: "… (Visa Signature)" -> "Visa Signature" */
 function getVariant(name) {
   if (!name) return "";
   const m = String(name).match(/\(([^)]+)\)\s*$/);
   return m ? m[1].trim() : "";
 }
 
+/** Canonicalize some common brand spellings */
 function brandCanonicalize(text) {
   let s = String(text || "");
   s = s.replace(/\bMakemytrip\b/gi, "MakeMyTrip");
@@ -87,6 +86,7 @@ function brandCanonicalize(text) {
   return s;
 }
 
+/** Levenshtein distance */
 function lev(a, b) {
   a = toNorm(a);
   b = toNorm(b);
@@ -119,6 +119,7 @@ function scoreCandidate(q, cand) {
   return (matchingWords / Math.max(1, qWords.length)) * 0.7 + sim * 0.3;
 }
 
+/** Dropdown entry builder */
 function makeEntry(raw, type) {
   const base = brandCanonicalize(getBase(raw));
   return { type, display: base, baseNorm: toNorm(base) };
@@ -153,6 +154,10 @@ function dedupWrappers(arr, seen) {
   return out;
 }
 
+/** build a URL that respects the deploy base path */
+const BASE = (import.meta?.env?.BASE_URL ?? "/");
+const csvUrl = (name) => `${BASE}${encodeURI(name)}`.replace(/\/{2,}/g, "/");
+
 /** Disclaimer */
 const Disclaimer = () => (
   <section className="disclaimer">
@@ -168,23 +173,28 @@ const Disclaimer = () => (
 
 /** -------------------- COMPONENT -------------------- */
 const AirlineOffers = () => {
+  // dropdown data (from allCards.csv ONLY)
   const [creditEntries, setCreditEntries] = useState([]);
   const [debitEntries, setDebitEntries] = useState([]);
 
-  const [chipCC, setChipCC] = useState([]);
-  const [chipDC, setChipDC] = useState([]);
+  // chip strips (from offer CSVs ONLY — NOT allCards.csv)
+  const [chipCC, setChipCC] = useState([]); // credit bases
+  const [chipDC, setChipDC] = useState([]); // debit bases
 
+  // ui state
   const [filteredCards, setFilteredCards] = useState([]);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState(null); // {type, display, baseNorm, _synthetic?}
+  const [selected, setSelected] = useState(null); // {type, display, baseNorm}
   const [noMatches, setNoMatches] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // offers
   const [swiggyOffers, setSwiggyOffers] = useState([]);
   const [zomatoOffers, setZomatoOffers] = useState([]);
   const [eazyOffers, setEazyOffers] = useState([]);
   const [permanentOffers, setPermanentOffers] = useState([]);
 
+  // responsive
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
     onResize();
@@ -192,12 +202,13 @@ const AirlineOffers = () => {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // allCards for dropdown only
+  // 1) Load allCards.csv for dropdown lists ONLY
   useEffect(() => {
     async function loadAllCards() {
       try {
-        const res = await axios.get(`/allCards.csv`);
-        const parsed = Papa.parse(res.data, { header: true });
+        const url = csvUrl("allCards.csv");
+        const res = await axios.get(url, { responseType: "text" });
+        const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
         const rows = parsed.data || [];
 
         const creditMap = new Map();
@@ -227,18 +238,25 @@ const AirlineOffers = () => {
 
         setCreditEntries(credit);
         setDebitEntries(debit);
+
         setFilteredCards([
           ...(credit.length ? [{ type: "heading", label: "Credit Cards" }] : []),
           ...credit,
           ...(debit.length ? [{ type: "heading", label: "Debit Cards" }] : []),
           ...debit,
         ]);
+
         if (!credit.length && !debit.length) {
           setNoMatches(true);
           setSelected(null);
         }
       } catch (e) {
-        console.error("allCards.csv load error:", e);
+        console.error("[allCards] load error", {
+          url: e?.config?.url,
+          status: e?.response?.status,
+          statusText: e?.response?.statusText,
+          message: e?.message,
+        });
         setNoMatches(true);
         setSelected(null);
       }
@@ -246,33 +264,41 @@ const AirlineOffers = () => {
     loadAllCards();
   }, []);
 
-  // offers (permanent, swiggy, zomato, eazydiner)
+  // 2) Load offer CSVs (ONLY: permanent, swiggy, zomato, eazydiner)
   useEffect(() => {
     async function loadOffers() {
-      try {
-        const files = [
-          { name: "swiggy.csv", setter: setSwiggyOffers },
-          { name: "zomato.csv", setter: setZomatoOffers },
-          { name: "eazydiner.csv", setter: setEazyOffers },
-          { name: "permanent.csv", setter: setPermanentOffers },
-        ];
-        await Promise.all(
-          files.map(async (f) => {
-            const res = await axios.get(`/${encodeURIComponent(f.name)}`);
-            const parsed = Papa.parse(res.data, { header: true });
+      const files = [
+        { name: "swiggy.csv", setter: setSwiggyOffers },
+        { name: "zomato.csv", setter: setZomatoOffers },
+        { name: "eazydiner.csv", setter: setEazyOffers },
+        { name: "permanent.csv", setter: setPermanentOffers },
+      ];
+
+      await Promise.all(
+        files.map(async (f) => {
+          const url = csvUrl(f.name);
+          try {
+            const res = await axios.get(url, { responseType: "text" });
+            const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
             f.setter(parsed.data || []);
-          })
-        );
-      } catch (e) {
-        console.error("Offer CSV load error:", e);
-      }
+          } catch (e) {
+            console.error("[offers] load error", f.name, {
+              url,
+              status: e?.response?.status,
+              statusText: e?.response?.statusText,
+              message: e?.message,
+            });
+            f.setter([]);
+          }
+        })
+      );
     }
     loadOffers();
   }, []);
 
-  // chips from offer CSVs only
+  /** Build chip strips from OFFER CSVs (exclude allCards.csv) */
   useEffect(() => {
-    const ccMap = new Map();
+    const ccMap = new Map(); // baseNorm -> display
     const dcMap = new Map();
 
     const harvestList = (val, targetMap) => {
@@ -287,18 +313,30 @@ const AirlineOffers = () => {
       for (const o of rows || []) {
         const ccField = firstField(o, LIST_FIELDS.credit);
         if (ccField) harvestList(ccField, ccMap);
+
         const dcField = firstField(o, LIST_FIELDS.debit);
         if (dcField) harvestList(dcField, dcMap);
       }
     };
 
+    // Offer files only
     harvestRows(swiggyOffers);
     harvestRows(zomatoOffers);
     harvestRows(eazyOffers);
 
+    // Permanent credit cards (credit only)
+    for (const o of permanentOffers || []) {
+      const nm = firstField(o, LIST_FIELDS.permanentCCName);
+      if (nm) {
+        const base = brandCanonicalize(getBase(nm));
+        const baseNorm = toNorm(base);
+        if (baseNorm) ccMap.set(baseNorm, ccMap.get(baseNorm) || base);
+      }
+    }
+
     setChipCC(Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b)));
     setChipDC(Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b)));
-  }, [swiggyOffers, zomatoOffers, eazyOffers]);
+  }, [swiggyOffers, zomatoOffers, eazyOffers, permanentOffers]);
 
   /** search box */
   const onChangeQuery = (e) => {
@@ -328,62 +366,32 @@ const AirlineOffers = () => {
     const cc = scored(creditEntries);
     const dc = scored(debitEntries);
 
-    // determine debit intent
-    const s = val.toLowerCase();
-    const isDebitIntent = s.includes("debit") || /\bdebit\s*card(s)?\b/i.test(val) || /\bdc\b/i.test(val);
-
     if (!cc.length && !dc.length) {
-      // No suggestions at all → show "no matching..." AND synthesize a selection
       setNoMatches(true);
+      setSelected(null);
       setFilteredCards([]);
-
-      const synthetic = { type: isDebitIntent ? "debit" : "credit", display: val, baseNorm: toNorm(val), _synthetic: true };
-      setSelected(synthetic);
       return;
     }
 
+    const wantsDCFirst = /\b(dc|debit|debit\s*card|debit\s*cards)\b/i.test(val);
+
     setNoMatches(false);
-    const listForDropdown = isDebitIntent
-      ? [
-          ...(dc.length ? [{ type: "heading", label: "Debit Cards" }] : []),
-          ...dc,
-          ...(cc.length ? [{ type: "heading", label: "Credit Cards" }] : []),
-          ...cc,
-        ]
-      : [
-          ...(cc.length ? [{ type: "heading", label: "Credit Cards" }] : []),
-          ...cc,
-          ...(dc.length ? [{ type: "heading", label: "Debit Cards" }] : []),
-          ...dc,
-        ];
-    setFilteredCards(listForDropdown);
-
-    // auto-pick exact match
-    const qnorm = toNorm(val);
-    const exactDC = debitEntries.find((x) => x.baseNorm === qnorm);
-    const exactCC = creditEntries.find((x) => x.baseNorm === qnorm);
-    if (exactDC) return onPick(exactDC);
-    if (exactCC) return onPick(exactCC);
-
-    // auto-pick when the prioritized bucket has exactly 1 suggestion
-    const focus = isDebitIntent ? dc : cc;
-    if (focus.length === 1) onPick(focus[0]);
+    setFilteredCards(
+      wantsDCFirst
+        ? [
+            ...(dc.length ? [{ type: "heading", label: "Debit Cards" }] : []),
+            ...dc,
+            ...(cc.length ? [{ type: "heading", label: "Credit Cards" }] : []),
+            ...cc,
+          ]
+        : [
+            ...(cc.length ? [{ type: "heading", label: "Credit Cards" }] : []),
+            ...cc,
+            ...(dc.length ? [{ type: "heading", label: "Debit Cards" }] : []),
+            ...dc,
+          ]
+    );
   };
-
-  useEffect(() => {
-    const qnorm = toNorm(query);
-    if (!qnorm) return;
-    if (!selected || selected.baseNorm !== qnorm) {
-      const exactDC = debitEntries.find((e) => e.baseNorm === qnorm);
-      const exactCC = creditEntries.find((e) => e.baseNorm === qnorm);
-      if (exactDC || exactCC) {
-        const pick = exactDC || exactCC;
-        setSelected(pick);
-        setFilteredCards([]);
-        setNoMatches(false);
-      }
-    }
-  }, [query, debitEntries, creditEntries]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const onPick = (entry) => {
     setSelected(entry);
@@ -392,24 +400,7 @@ const AirlineOffers = () => {
     setNoMatches(false);
   };
 
-  const onInputKeyDown = (e) => {
-    if (e.key === "Enter") {
-      const first = filteredCards.find((it) => it.type !== "heading");
-      if (first) return onPick(first);
-
-      // if nothing to pick, synthesize selection so "No offer..." can show
-      if (!selected && query.trim()) {
-        setSelected({ type: "credit", display: query, baseNorm: toNorm(query), _synthetic: true });
-        setNoMatches(true);
-      }
-    }
-  };
-
-  const onInputBlur = () => {
-    const first = filteredCards.find((it) => it.type !== "heading");
-    if (first && !selected) onPick(first);
-  };
-
+  // Chip click → set the dropdown + selected entry
   const handleChipClick = (name, type) => {
     const display = brandCanonicalize(getBase(name));
     const baseNorm = toNorm(display);
@@ -445,60 +436,73 @@ const AirlineOffers = () => {
           break;
         }
       }
-      if (matched) out.push({ offer: o, site, variantText: matchedVariant });
+      if (matched) {
+        out.push({ offer: o, site, variantText: matchedVariant });
+      }
     }
     return out;
   }
 
-  // Collect + dedup (permanent only if credit)
+  // Collect then global-dedup by priority
   const wPermanent = matchesFor(permanentOffers, "permanent", "Permanent");
   const wSwiggy = matchesFor(swiggyOffers, selected?.type === "debit" ? "debit" : "credit", "Swiggy");
   const wZomato = matchesFor(zomatoOffers, selected?.type === "debit" ? "debit" : "credit", "Zomato");
   const wEazy = matchesFor(eazyOffers, selected?.type === "debit" ? "debit" : "credit", "EazyDiner");
 
   const seen = new Set();
-  const dPermanent = selected?.type === "credit" ? dedupWrappers(wPermanent, seen) : [];
+  const dPermanent = selected?.type === "credit" ? dedupWrappers(wPermanent, seen) : []; // permanent for credit only
   const dSwiggy = dedupWrappers(wSwiggy, seen);
   const dZomato = dedupWrappers(wZomato, seen);
   const dEazy = dedupWrappers(wEazy, seen);
 
-  const hasAny = Boolean(dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length);
+  const hasAny = Boolean(
+    dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length
+  );
 
   /** Offer card UI */
-  const OfferCard = ({ wrapper, isPermanent = false }) => {
-    const [copied, setCopied] = useState(false);
-    const o = wrapper.offer;
-    const siteKey = String(wrapper.site || "").toLowerCase();
+  const OfferCard = ({ wrapper, isPermanent, isRetail, isZomato }) => {
+    const [copied, setCopied] = useState(false); // safe at top for hooks
 
+    const o = wrapper.offer;
+
+    // case-insensitive getter
+    const getCI = (obj, key) => {
+      if (!obj) return undefined;
+      const target = String(key).toLowerCase();
+      for (const k of Object.keys(obj)) {
+        if (String(k).toLowerCase() === target) return obj[k];
+      }
+      return undefined;
+    };
+
+    // Defaults (for retail & others)
     let title = firstField(o, LIST_FIELDS.title) || o.Website || "Offer";
-    let desc = firstField(o, LIST_FIELDS.desc) || "";
+    let desc = firstField(o, LIST_FIELDS.desc);
     let image = firstField(o, LIST_FIELDS.image);
     let link = firstField(o, LIST_FIELDS.link);
 
-    if (siteKey === "swiggy" || siteKey === "eazydiner") {
+    // Swiggy/EazyDiner fields (image, offer title, description, link)
+    if (isRetail) {
       title = getCI(o, "Offer") ?? title;
-      desc = getCI(o, "Description") ?? desc;
-      image = getCI(o, "Images") ?? image;
+      desc = getCI(o, "Offer Description") ?? getCI(o, "Description") ?? desc;
+      image = getCI(o, "Images") ?? getCI(o, "Image") ?? image;
       link = getCI(o, "Link") ?? link;
     }
 
-    // Zomato: Coupon Code + Description
+    // Zomato special: coupon + description
     let couponCode;
-    if (siteKey === "zomato") {
+    if (isZomato) {
       couponCode = getCI(o, "Coupon Code");
+      title = title || "Zomato Offer";
       desc = getCI(o, "Description") ?? desc;
-      image = getCI(o, "Images") ?? image;
-      link = getCI(o, "Link") ?? link;
-    }
-
-    if (isPermanent) {
-      desc = firstField(o, LIST_FIELDS.permanentBenefit) || desc;
     }
 
     const showVariantNote =
       VARIANT_NOTE_SITES.has(wrapper.site) &&
       wrapper.variantText &&
       wrapper.variantText.trim().length > 0;
+
+    const permanentBenefit = isPermanent ? firstField(o, LIST_FIELDS.permanentBenefit) : "";
 
     const onCopy = () => {
       if (!couponCode) return;
@@ -508,12 +512,12 @@ const AirlineOffers = () => {
       });
     };
 
-    if (siteKey === "zomato") {
+    // Zomato render (coupon + description)
+    if (isZomato) {
       return (
         <div className="offer-card">
-          {image && <img src={image} alt={title || "Offer"} />}
           <div className="offer-info">
-            {title && <h3 className="offer-title">{title}</h3>}
+            <h3 className="offer-title">{title}</h3>
 
             {couponCode && (
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -528,47 +532,35 @@ const AirlineOffers = () => {
                 >
                   {couponCode}
                 </span>
-                <button
-                  className="btn"
-                  onClick={onCopy}
-                  aria-label="Copy coupon code"
-                  title="Copy coupon code"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                >
+                <button className="btn" onClick={onCopy} aria-label="Copy coupon code" title="Copy coupon code">
                   <span role="img" aria-hidden="true">📋</span> Copy
                 </button>
                 {copied && <span style={{ color: "#1e7145", fontSize: 14 }}>Copied!</span>}
               </div>
             )}
 
-            {desc && <div className="offer-desc">{desc}</div>}
+            {desc && <p className="offer-desc">{desc}</p>}
 
             {showVariantNote && (
-              <p className="network-note" style={{ marginTop: 8 }}>
+              <p className="network-note">
                 <strong>Note:</strong> This benefit is applicable only on <em>{wrapper.variantText}</em> variant
               </p>
-            )}
-
-            {link && (
-              <button className="btn" onClick={() => window.open(link, "_blank")}>
-                View Offer
-              </button>
             )}
           </div>
         </div>
       );
     }
 
-    // Default (Swiggy, EazyDiner, Permanent)
+    // Default / Retail / Permanent
     return (
       <div className="offer-card">
-        {image && <img src={image} alt={title || "Offer"} />}
+        {image && <img src={image} alt={title} />}
         <div className="offer-info">
-          {title && <h3 className="offer-title">{title}</h3>}
+          <h3 className="offer-title">{title}</h3>
 
           {isPermanent ? (
             <>
-              {desc && <p className="offer-desc">{desc}</p>}
+              {permanentBenefit && <p className="offer-desc">{permanentBenefit}</p>}
               <p className="inbuilt-note">
                 <strong>This is a inbuilt feature of this credit card</strong>
               </p>
@@ -578,7 +570,7 @@ const AirlineOffers = () => {
           )}
 
           {showVariantNote && (
-            <p className="network-note" style={{ marginTop: 8 }}>
+            <p className="network-note">
               <strong>Note:</strong> This benefit is applicable only on <em>{wrapper.variantText}</em> variant
             </p>
           )}
@@ -593,13 +585,9 @@ const AirlineOffers = () => {
     );
   };
 
-  /** ---------- RENDER ---------- */
-  const showNoMatchingText = noMatches && query.trim().length > 0;
-  const showNoOfferText = selected && !hasAny && !noMatches;
-
   return (
     <div className="App" style={{ fontFamily: "'Libre Baskerville', serif" }}>
-      {/* Chips */}
+      {/* Cards-with-offers strip container */}
       {(chipCC.length > 0 || chipDC.length > 0) && (
         <div
           style={{
@@ -626,6 +614,7 @@ const AirlineOffers = () => {
             <span>Credit And Debit Cards Which Have Offers</span>
           </div>
 
+          {/* Credit strip */}
           {chipCC.length > 0 && (
             <marquee direction="left" scrollamount="4" style={{ marginBottom: 8, whiteSpace: "nowrap" }}>
               <strong style={{ marginRight: 10, color: "#1F2D45" }}>Credit Cards:</strong>
@@ -659,6 +648,7 @@ const AirlineOffers = () => {
             </marquee>
           )}
 
+          {/* Debit strip */}
           {chipDC.length > 0 && (
             <marquee direction="left" scrollamount="4" style={{ whiteSpace: "nowrap" }}>
               <strong style={{ marginRight: 10, color: "#1F2D45" }}>Debit Cards:</strong>
@@ -700,8 +690,6 @@ const AirlineOffers = () => {
           type="text"
           value={query}
           onChange={onChangeQuery}
-          onKeyDown={onInputKeyDown}
-          onBlur={onInputBlur}
           placeholder="Type a Credit or Debit Card...."
           className="dropdown-input"
           style={{
@@ -712,7 +700,6 @@ const AirlineOffers = () => {
             borderRadius: "6px",
           }}
         />
-
         {query.trim() && !!filteredCards.length && (
           <ul
             className="dropdown-list"
@@ -739,7 +726,11 @@ const AirlineOffers = () => {
                 <li
                   key={`i-${idx}-${item.display}`}
                   onClick={() => onPick(item)}
-                  style={{ padding: "10px", cursor: "pointer", borderBottom: "1px solid #f2f2f2" }}
+                  style={{
+                    padding: "10px",
+                    cursor: "pointer",
+                    borderBottom: "1px solid #f2f2f2",
+                  }}
                   onMouseOver={(e) => (e.currentTarget.style.background = "#f7f9ff")}
                   onMouseOut={(e) => (e.currentTarget.style.background = "transparent")}
                 >
@@ -749,17 +740,13 @@ const AirlineOffers = () => {
             )}
           </ul>
         )}
-
-        {/* Always-visible status line (makes the messages impossible to miss) */}
-        <div aria-live="polite" style={{ textAlign: "center", marginTop: 8, minHeight: 22 }}>
-          {showNoMatchingText && (
-            <p style={{ color: "#d32f2f", margin: 0 }}>No matching cards found. Please try a different name.</p>
-          )}
-          {showNoOfferText && (
-            <p style={{ color: "#d32f2f", margin: 0 }}>No offer available for this card</p>
-          )}
-        </div>
       </div>
+
+      {noMatches && query.trim() && (
+        <p style={{ color: "#d32f2f", textAlign: "center", marginTop: 8 }}>
+          No matching cards found. Please try a different name.
+        </p>
+      )}
 
       {/* Offers by section */}
       {selected && hasAny && !noMatches && (
@@ -780,7 +767,7 @@ const AirlineOffers = () => {
               <h2 style={{ textAlign: "center" }}>Offers On Swiggy</h2>
               <div className="offer-grid">
                 {dSwiggy.map((w, i) => (
-                  <OfferCard key={`sw-${i}`} wrapper={w} />
+                  <OfferCard key={`sw-${i}`} wrapper={w} isRetail />
                 ))}
               </div>
             </div>
@@ -791,7 +778,7 @@ const AirlineOffers = () => {
               <h2 style={{ textAlign: "center" }}>Offers On Zomato</h2>
               <div className="offer-grid">
                 {dZomato.map((w, i) => (
-                  <OfferCard key={`zo-${i}`} wrapper={w} />
+                  <OfferCard key={`zo-${i}`} wrapper={w} isZomato />
                 ))}
               </div>
             </div>
@@ -802,12 +789,18 @@ const AirlineOffers = () => {
               <h2 style={{ textAlign: "center" }}>Offers On EazyDiner</h2>
               <div className="offer-grid">
                 {dEazy.map((w, i) => (
-                  <OfferCard key={`ez-${i}`} wrapper={w} />
+                  <OfferCard key={`ez-${i}`} wrapper={w} isRetail />
                 ))}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {selected && !hasAny && !noMatches && (
+        <p style={{ color: "#d32f2f", textAlign: "center", marginTop: 10 }}>
+          No offer available for this card
+        </p>
       )}
 
       {selected && hasAny && !noMatches && (
