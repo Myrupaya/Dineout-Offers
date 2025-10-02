@@ -18,13 +18,8 @@ const LIST_FIELDS = {
 
 const MAX_SUGGESTIONS = 50;
 
-/** Sites that should display the red per-card “Applicable only on {variant} variant” note */
-const VARIANT_NOTE_SITES = new Set([
-  "Swiggy",
-  "Zomato",
-  "EazyDiner",
-  "Permanent",
-]);
+/** Sites that should display the per-card variant note */
+const VARIANT_NOTE_SITES = new Set(["Swiggy", "Zomato", "EazyDiner", "Permanent"]);
 
 /** -------------------- HELPERS -------------------- */
 const toNorm = (s) =>
@@ -59,20 +54,17 @@ function splitList(val) {
     .filter(Boolean);
 }
 
-/** Strip trailing parentheses: "HDFC Regalia (Visa Signature)" -> "HDFC Regalia" */
 function getBase(name) {
   if (!name) return "";
   return String(name).replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
-/** Variant if present at end-in-parens: "… (Visa Signature)" -> "Visa Signature" */
 function getVariant(name) {
   if (!name) return "";
   const m = String(name).match(/\(([^)]+)\)\s*$/);
   return m ? m[1].trim() : "";
 }
 
-/** Canonicalize some common brand spellings */
 function brandCanonicalize(text) {
   let s = String(text || "");
   s = s.replace(/\bMakemytrip\b/gi, "MakeMyTrip");
@@ -86,7 +78,6 @@ function brandCanonicalize(text) {
   return s;
 }
 
-/** Levenshtein distance */
 function lev(a, b) {
   a = toNorm(a);
   b = toNorm(b);
@@ -119,7 +110,6 @@ function scoreCandidate(q, cand) {
   return (matchingWords / Math.max(1, qWords.length)) * 0.7 + sim * 0.3;
 }
 
-/** Dropdown entry builder */
 function makeEntry(raw, type) {
   const base = brandCanonicalize(getBase(raw));
   return { type, display: base, baseNorm: toNorm(base) };
@@ -142,7 +132,6 @@ function offerKey(offer) {
   const link = normalizeUrl(firstField(offer, LIST_FIELDS.link) || "");
   return `${title}||${desc}||${image}||${link}`;
 }
-
 function dedupWrappers(arr, seen) {
   const out = [];
   for (const w of arr || []) {
@@ -154,7 +143,7 @@ function dedupWrappers(arr, seen) {
   return out;
 }
 
-/** build a URL that respects the deploy base path */
+/** Build a URL that respects the deploy base path */
 const BASE = (import.meta?.env?.BASE_URL ?? "/");
 const csvUrl = (name) => `${BASE}${encodeURI(name)}`.replace(/\/{2,}/g, "/");
 
@@ -178,8 +167,8 @@ const AirlineOffers = () => {
   const [debitEntries, setDebitEntries] = useState([]);
 
   // chip strips (from offer CSVs ONLY — NOT allCards.csv)
-  const [chipCC, setChipCC] = useState([]); // credit bases
-  const [chipDC, setChipDC] = useState([]); // debit bases
+  const [chipCC, setChipCC] = useState([]);
+  const [chipDC, setChipDC] = useState([]);
 
   // ui state
   const [filteredCards, setFilteredCards] = useState([]);
@@ -194,6 +183,13 @@ const AirlineOffers = () => {
   const [eazyOffers, setEazyOffers] = useState([]);
   const [permanentOffers, setPermanentOffers] = useState([]);
 
+  // load error flags (to surface why chips may be empty)
+  const [offerErrors, setOfferErrors] = useState({
+    swiggy: null,
+    zomato: null,
+    eazy: null,
+  });
+
   // responsive
   useEffect(() => {
     const onResize = () => setIsMobile(window.innerWidth <= 768);
@@ -207,6 +203,7 @@ const AirlineOffers = () => {
     async function loadAllCards() {
       try {
         const url = csvUrl("allCards.csv");
+        console.log("[allCards] loading", url);
         const res = await axios.get(url, { responseType: "text" });
         const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
         const rows = parsed.data || [];
@@ -236,6 +233,7 @@ const AirlineOffers = () => {
           .sort((a, b) => a.localeCompare(b))
           .map((d) => makeEntry(d, "debit"));
 
+        console.log("[allCards] loaded", { credit: credit.length, debit: debit.length });
         setCreditEntries(credit);
         setDebitEntries(debit);
 
@@ -268,19 +266,24 @@ const AirlineOffers = () => {
   useEffect(() => {
     async function loadOffers() {
       const files = [
-        { name: "swiggy.csv", setter: setSwiggyOffers },
-        { name: "zomato.csv", setter: setZomatoOffers },
-        { name: "eazydiner.csv", setter: setEazyOffers },
-        { name: "permanent.csv", setter: setPermanentOffers },
+        { name: "swiggy.csv", setter: setSwiggyOffers, key: "swiggy" },
+        { name: "zomato.csv", setter: setZomatoOffers, key: "zomato" },
+        { name: "eazydiner.csv", setter: setEazyOffers, key: "eazy" },
+        { name: "permanent.csv", setter: setPermanentOffers, key: "permanent" },
       ];
 
       await Promise.all(
         files.map(async (f) => {
           const url = csvUrl(f.name);
           try {
+            console.log("[offers] loading", url);
             const res = await axios.get(url, { responseType: "text" });
             const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
             f.setter(parsed.data || []);
+            if (f.key !== "permanent") {
+              setOfferErrors((prev) => ({ ...prev, [f.key]: null }));
+            }
+            console.log("[offers] loaded", f.name, { rows: (parsed.data || []).length });
           } catch (e) {
             console.error("[offers] load error", f.name, {
               url,
@@ -289,6 +292,9 @@ const AirlineOffers = () => {
               message: e?.message,
             });
             f.setter([]);
+            if (f.key !== "permanent") {
+              setOfferErrors((prev) => ({ ...prev, [f.key]: e?.response?.status || "ERR" }));
+            }
           }
         })
       );
@@ -334,8 +340,12 @@ const AirlineOffers = () => {
       }
     }
 
-    setChipCC(Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b)));
-    setChipDC(Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b)));
+    const cc = Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b));
+    const dc = Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b));
+
+    console.log("[chips] built", { cc: cc.length, dc: dc.length });
+    setChipCC(cc);
+    setChipDC(dc);
   }, [swiggyOffers, zomatoOffers, eazyOffers, permanentOffers]);
 
   /** search box */
@@ -455,17 +465,13 @@ const AirlineOffers = () => {
   const dZomato = dedupWrappers(wZomato, seen);
   const dEazy = dedupWrappers(wEazy, seen);
 
-  const hasAny = Boolean(
-    dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length
-  );
+  const hasAny = Boolean(dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length);
 
   /** Offer card UI */
   const OfferCard = ({ wrapper, isPermanent, isRetail, isZomato }) => {
-    const [copied, setCopied] = useState(false); // safe at top for hooks
+    const [copied, setCopied] = useState(false);
 
     const o = wrapper.offer;
-
-    // case-insensitive getter
     const getCI = (obj, key) => {
       if (!obj) return undefined;
       const target = String(key).toLowerCase();
@@ -475,13 +481,12 @@ const AirlineOffers = () => {
       return undefined;
     };
 
-    // Defaults (for retail & others)
     let title = firstField(o, LIST_FIELDS.title) || o.Website || "Offer";
     let desc = firstField(o, LIST_FIELDS.desc);
     let image = firstField(o, LIST_FIELDS.image);
     let link = firstField(o, LIST_FIELDS.link);
 
-    // Swiggy/EazyDiner fields (image, offer title, description, link)
+    // Swiggy/EazyDiner
     if (isRetail) {
       title = getCI(o, "Offer") ?? title;
       desc = getCI(o, "Offer Description") ?? getCI(o, "Description") ?? desc;
@@ -489,7 +494,7 @@ const AirlineOffers = () => {
       link = getCI(o, "Link") ?? link;
     }
 
-    // Zomato special: coupon + description
+    // Zomato
     let couponCode;
     if (isZomato) {
       couponCode = getCI(o, "Coupon Code");
@@ -512,7 +517,6 @@ const AirlineOffers = () => {
       });
     };
 
-    // Zomato render (coupon + description)
     if (isZomato) {
       return (
         <div className="offer-card">
@@ -551,7 +555,6 @@ const AirlineOffers = () => {
       );
     }
 
-    // Default / Retail / Permanent
     return (
       <div className="offer-card">
         {image && <img src={image} alt={title} />}
@@ -585,10 +588,13 @@ const AirlineOffers = () => {
     );
   };
 
+  const anyOfferCsvMissing =
+    (offerErrors.swiggy || offerErrors.zomato || offerErrors.eazy) !== null;
+
   return (
     <div className="App" style={{ fontFamily: "'Libre Baskerville', serif" }}>
       {/* Cards-with-offers strip container */}
-      {(chipCC.length > 0 || chipDC.length > 0) && (
+      {(chipCC.length > 0 || chipDC.length > 0 || anyOfferCsvMissing) && (
         <div
           style={{
             maxWidth: 1200,
@@ -613,6 +619,16 @@ const AirlineOffers = () => {
           >
             <span>Credit And Debit Cards Which Have Offers</span>
           </div>
+
+          {/* Helpful inline note when offer CSVs are missing (why DC may be empty) */}
+          {chipDC.length === 0 && anyOfferCsvMissing && (
+            <div style={{ margin: "0 0 10px", color: "#b00020", textAlign: "center", fontSize: 13 }}>
+              Debit-card chips are empty because one or more offer CSVs were not found:
+              {offerErrors.swiggy ? " swiggy.csv" : ""}
+              {offerErrors.zomato ? " zomato.csv" : ""}
+              {offerErrors.eazy ? " eazydiner.csv" : ""}. Add these files under <code>/public</code>.
+            </div>
+          )}
 
           {/* Credit strip */}
           {chipCC.length > 0 && (
