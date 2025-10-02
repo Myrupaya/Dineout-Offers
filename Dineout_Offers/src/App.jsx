@@ -266,9 +266,9 @@ const AirlineOffers = () => {
   useEffect(() => {
     async function loadOffers() {
       const files = [
-        { name: "swiggy.csv", setter: setSwiggyOffers, key: "swiggy" },
-        { name: "zomato.csv", setter: setZomatoOffers, key: "zomato" },
-        { name: "eazydiner.csv", setter: setEazyOffers, key: "eazy" },
+        { name: "Swiggy.csv", setter: setSwiggyOffers, key: "swiggy" },
+        { name: "Zomato.csv", setter: setZomatoOffers, key: "zomato" },
+        { name: "Eazydiner.csv", setter: setEazyOffers, key: "eazy" },
         { name: "permanent.csv", setter: setPermanentOffers, key: "permanent" },
       ];
 
