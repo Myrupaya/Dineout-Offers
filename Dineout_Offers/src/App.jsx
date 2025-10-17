@@ -21,41 +21,6 @@ const MAX_SUGGESTIONS = 50;
 /** Sites that should display the per-card variant note */
 const VARIANT_NOTE_SITES = new Set(["Swiggy", "Zomato", "EazyDiner", "Permanent"]);
 
-/** -------------------- IMAGE FALLBACKS -------------------- */
-const FALLBACK_IMAGE_BY_SITE = {
-  swiggy:
-    "https://bsmedia.business-standard.com/_media/bs/img/article/2023-07/17/full/1689574606-2001.png",
-  zomato:
-    "https://c.ndtvimg.com/2024-06/mr51ho8o_zomato-logo-stock-image_625x300_03_June_24.jpg?im=FeatureCrop,algorithm=dnn,width=545,height=307",
-  eazydiner:
-    "https://pbs.twimg.com/profile_images/1559453938390294530/zvZbaruY_400x400.jpg",
-};
-
-function isUsableImage(val) {
-  if (!val) return false;
-  const s = String(val).trim();
-  if (!s) return false;
-  if (/^(na|n\/a|null|undefined|-|image unavailable)$/i.test(s)) return false;
-  return true;
-}
-function resolveImage(siteKey, candidate) {
-  const key = String(siteKey || "").toLowerCase();
-  const fallback = FALLBACK_IMAGE_BY_SITE[key];
-  const usingFallback = !isUsableImage(candidate) && !!fallback;
-  return { src: usingFallback ? fallback : candidate, usingFallback };
-}
-function handleImgError(e, siteKey) {
-  const key = String(siteKey || "").toLowerCase();
-  const fallback = FALLBACK_IMAGE_BY_SITE[key];
-  const el = e.currentTarget;
-  if (fallback && el.src !== fallback) {
-    el.src = fallback;
-    el.classList.add("is-fallback");
-  } else {
-    el.style.display = "none";
-  }
-}
-
 /** -------------------- HELPERS -------------------- */
 const toNorm = (s) =>
   String(s || "")
@@ -136,8 +101,10 @@ function scoreCandidate(q, cand) {
   const cs = toNorm(cand);
   if (!qs) return 0;
   if (cs.includes(qs)) return 100;
+
   const qWords = qs.split(" ").filter(Boolean);
   const cWords = cs.split(" ").filter(Boolean);
+
   const matchingWords = qWords.filter((qw) => cWords.some((cw) => cw.includes(qw))).length;
   const sim = 1 - lev(qs, cs) / Math.max(qs.length, cs.length);
   return (matchingWords / Math.max(1, qWords.length)) * 0.7 + sim * 0.3;
@@ -155,7 +122,9 @@ function normalizeUrl(u) {
   if (s.endsWith("/")) s = s.slice(0, -1);
   return s;
 }
-function normalizeText(s) { return toNorm(s || ""); }
+function normalizeText(s) {
+  return toNorm(s || "");
+}
 function offerKey(offer) {
   const image = normalizeUrl(firstField(offer, LIST_FIELDS.image) || "");
   const title = normalizeText(firstField(offer, LIST_FIELDS.title) || offer.Website || "");
@@ -177,6 +146,41 @@ function dedupWrappers(arr, seen) {
 /** Build a URL that respects the deploy base path */
 const BASE = (import.meta?.env?.BASE_URL ?? "/");
 const csvUrl = (name) => `${BASE}${encodeURI(name)}`.replace(/\/{2,}/g, "/");
+
+/** -------------------- IMAGE FALLBACKS -------------------- */
+const FALLBACK_IMAGE_BY_SITE = {
+  swiggy:
+    "https://bsmedia.business-standard.com/_media/bs/img/article/2023-07/17/full/1689574606-2001.png",
+  zomato:
+    "https://c.ndtvimg.com/2024-06/mr51ho8o_zomato-logo-stock-image_625x300_03_June_24.jpg?im=FeatureCrop,algorithm=dnn,width=545,height=307",
+  eazydiner:
+    "https://pbs.twimg.com/profile_images/1559453938390294530/zvZbaruY_400x400.jpg",
+};
+
+function isUsableImage(val) {
+  if (!val) return false;
+  const s = String(val).trim();
+  if (!s) return false;
+  if (/^(na|n\/a|null|undefined|-|image unavailable)$/i.test(s)) return false;
+  return true;
+}
+function resolveImage(siteKey, candidate) {
+  const key = String(siteKey || "").toLowerCase();
+  const fallback = FALLBACK_IMAGE_BY_SITE[key];
+  const usingFallback = !isUsableImage(candidate) && !!fallback;
+  return { src: usingFallback ? fallback : candidate, usingFallback };
+}
+function handleImgError(e, siteKey) {
+  const key = String(siteKey || "").toLowerCase();
+  const fallback = FALLBACK_IMAGE_BY_SITE[key];
+  const el = e.currentTarget;
+  if (fallback && el.src !== fallback) {
+    el.src = fallback;
+    el.classList.add("is-fallback");
+  } else {
+    el.style.display = "none";
+  }
+}
 
 /** Disclaimer */
 const Disclaimer = () => (
@@ -278,7 +282,6 @@ const AirlineOffers = () => {
           setSelected(null);
         }
       } catch (e) {
-        console.error("[allCards] load error", e?.message);
         setNoMatches(true);
         setSelected(null);
       }
@@ -356,11 +359,8 @@ const AirlineOffers = () => {
       }
     }
 
-    const cc = Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b));
-    const dc = Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b));
-
-    setChipCC(cc);
-    setChipDC(dc);
+    setChipCC(Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b)));
+    setChipDC(Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b)));
   }, [swiggyOffers, zomatoOffers, eazyOffers, permanentOffers]);
 
   /** search box */
@@ -482,7 +482,7 @@ const AirlineOffers = () => {
 
   const hasAny = Boolean(dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length);
 
-  /** Offer card UI (with site logo fallbacks for Swiggy/Zomato/EazyDiner) */
+  /** Offer card UI (with image fallbacks) */
   const OfferCard = ({ wrapper, isPermanent, isRetail, isZomato }) => {
     const [copied, setCopied] = useState(false);
 
@@ -501,7 +501,7 @@ const AirlineOffers = () => {
     let image = firstField(o, LIST_FIELDS.image);
     let link = firstField(o, LIST_FIELDS.link);
 
-    // Swiggy/EazyDiner (retail-style rows)
+    // Swiggy/EazyDiner
     if (isRetail) {
       title = getCI(o, "Offer") ?? title;
       desc = getCI(o, "Offer Description") ?? getCI(o, "Description") ?? desc;
@@ -509,7 +509,7 @@ const AirlineOffers = () => {
       link = getCI(o, "Link") ?? link;
     }
 
-    // Zomato specifics
+    // Zomato
     let couponCode;
     if (isZomato) {
       couponCode = getCI(o, "Coupon Code");
@@ -532,52 +532,14 @@ const AirlineOffers = () => {
       });
     };
 
-    // Decide image + fallback only for Swiggy/Zomato/EazyDiner
+    // Decide image + fallback for Swiggy/Zomato/EazyDiner
     const siteKey = String(wrapper.site || "").toLowerCase();
     const wantsFallbackLogic = ["swiggy", "zomato", "eazydiner"].includes(siteKey);
     const { src: imgSrc, usingFallback } = wantsFallbackLogic
       ? resolveImage(siteKey, image)
       : { src: image, usingFallback: false };
 
-    // ZOMATO card (coupon-focused, no image needed)
-    if (isZomato) {
-      return (
-        <div className="offer-card">
-          <div className="offer-info">
-            <h3 className="offer-title">{title}</h3>
-
-            {couponCode && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <span
-                  style={{
-                    padding: "6px 10px",
-                    border: "1px dashed #9aa4b2",
-                    borderRadius: 6,
-                    background: "#f7f9ff",
-                    fontFamily: "monospace",
-                  }}
-                >
-                  {couponCode}
-                </span>
-                <button className="btn" onClick={onCopy} aria-label="Copy coupon code" title="Copy coupon code">
-                  <span role="img" aria-hidden="true">📋</span> Copy
-                </button>
-                {copied && <span style={{ color: "#1e7145", fontSize: 14 }}>Copied!</span>}
-              </div>
-            )}
-
-            {desc && <p className="offer-desc">{desc}</p>}
-
-            {showVariantNote && (
-              <p className="network-note">
-                <strong>Note:</strong> This benefit is applicable only on <em>{wrapper.variantText}</em> variant
-              </p>
-            )}
-          </div>
-        </div>
-      );
-    }
-
+    // Zomato coupon-only block still shows (optional) image above
     return (
       <div className="offer-card">
         {imgSrc && (
@@ -588,6 +550,7 @@ const AirlineOffers = () => {
             onError={(e) => wantsFallbackLogic && handleImgError(e, siteKey)}
           />
         )}
+
         <div className="offer-info">
           <h3 className="offer-title">{title}</h3>
 
@@ -600,6 +563,26 @@ const AirlineOffers = () => {
             </>
           ) : (
             desc && <p className="offer-desc">{desc}</p>
+          )}
+
+          {isZomato && couponCode && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span
+                style={{
+                  padding: "6px 10px",
+                  border: "1px dashed #9aa4b2",
+                  borderRadius: 6,
+                  background: "#f7f9ff",
+                  fontFamily: "monospace",
+                }}
+              >
+                {couponCode}
+              </span>
+              <button className="btn" onClick={onCopy} aria-label="Copy coupon code" title="Copy coupon code">
+                <span role="img" aria-hidden="true">📋</span> Copy
+              </button>
+              {copied && <span style={{ color: "#1e7145", fontSize: 14 }}>Copied!</span>}
+            </div>
           )}
 
           {showVariantNote && (
@@ -623,6 +606,7 @@ const AirlineOffers = () => {
 
   return (
     <div className="App" style={{ fontFamily: "'Libre Baskerville', serif" }}>
+      {/* Cards-with-offers strip container */}
       {(chipCC.length > 0 || chipDC.length > 0 || anyOfferCsvMissing) && (
         <div
           style={{
@@ -649,6 +633,7 @@ const AirlineOffers = () => {
             <span>Credit And Debit Cards Which Have Offers</span>
           </div>
 
+          {/* Helpful inline note when offer CSVs are missing (why DC may be empty) */}
           {chipDC.length === 0 && anyOfferCsvMissing && (
             <div style={{ margin: "0 0 10px", color: "#b00020", textAlign: "center", fontSize: 13 }}>
               Debit-card chips are empty because one or more offer CSVs were not found:
