@@ -21,6 +21,41 @@ const MAX_SUGGESTIONS = 50;
 /** Sites that should display the per-card variant note */
 const VARIANT_NOTE_SITES = new Set(["Swiggy", "Zomato", "EazyDiner", "Permanent"]);
 
+/** -------------------- IMAGE FALLBACKS -------------------- */
+const FALLBACK_IMAGE_BY_SITE = {
+  swiggy:
+    "https://bsmedia.business-standard.com/_media/bs/img/article/2023-07/17/full/1689574606-2001.png",
+  zomato:
+    "https://c.ndtvimg.com/2024-06/mr51ho8o_zomato-logo-stock-image_625x300_03_June_24.jpg?im=FeatureCrop,algorithm=dnn,width=545,height=307",
+  eazydiner:
+    "https://pbs.twimg.com/profile_images/1559453938390294530/zvZbaruY_400x400.jpg",
+};
+
+function isUsableImage(val) {
+  if (!val) return false;
+  const s = String(val).trim();
+  if (!s) return false;
+  if (/^(na|n\/a|null|undefined|-|image unavailable)$/i.test(s)) return false;
+  return true;
+}
+function resolveImage(siteKey, candidate) {
+  const key = String(siteKey || "").toLowerCase();
+  const fallback = FALLBACK_IMAGE_BY_SITE[key];
+  const usingFallback = !isUsableImage(candidate) && !!fallback;
+  return { src: usingFallback ? fallback : candidate, usingFallback };
+}
+function handleImgError(e, siteKey) {
+  const key = String(siteKey || "").toLowerCase();
+  const fallback = FALLBACK_IMAGE_BY_SITE[key];
+  const el = e.currentTarget;
+  if (fallback && el.src !== fallback) {
+    el.src = fallback;
+    el.classList.add("is-fallback");
+  } else {
+    el.style.display = "none";
+  }
+}
+
 /** -------------------- HELPERS -------------------- */
 const toNorm = (s) =>
   String(s || "")
@@ -101,10 +136,8 @@ function scoreCandidate(q, cand) {
   const cs = toNorm(cand);
   if (!qs) return 0;
   if (cs.includes(qs)) return 100;
-
   const qWords = qs.split(" ").filter(Boolean);
   const cWords = cs.split(" ").filter(Boolean);
-
   const matchingWords = qWords.filter((qw) => cWords.some((cw) => cw.includes(qw))).length;
   const sim = 1 - lev(qs, cs) / Math.max(qs.length, cs.length);
   return (matchingWords / Math.max(1, qWords.length)) * 0.7 + sim * 0.3;
@@ -122,9 +155,7 @@ function normalizeUrl(u) {
   if (s.endsWith("/")) s = s.slice(0, -1);
   return s;
 }
-function normalizeText(s) {
-  return toNorm(s || "");
-}
+function normalizeText(s) { return toNorm(s || ""); }
 function offerKey(offer) {
   const image = normalizeUrl(firstField(offer, LIST_FIELDS.image) || "");
   const title = normalizeText(firstField(offer, LIST_FIELDS.title) || offer.Website || "");
@@ -203,7 +234,6 @@ const AirlineOffers = () => {
     async function loadAllCards() {
       try {
         const url = csvUrl("allCards.csv");
-        console.log("[allCards] loading", url);
         const res = await axios.get(url, { responseType: "text" });
         const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
         const rows = parsed.data || [];
@@ -233,7 +263,6 @@ const AirlineOffers = () => {
           .sort((a, b) => a.localeCompare(b))
           .map((d) => makeEntry(d, "debit"));
 
-        console.log("[allCards] loaded", { credit: credit.length, debit: debit.length });
         setCreditEntries(credit);
         setDebitEntries(debit);
 
@@ -249,12 +278,7 @@ const AirlineOffers = () => {
           setSelected(null);
         }
       } catch (e) {
-        console.error("[allCards] load error", {
-          url: e?.config?.url,
-          status: e?.response?.status,
-          statusText: e?.response?.statusText,
-          message: e?.message,
-        });
+        console.error("[allCards] load error", e?.message);
         setNoMatches(true);
         setSelected(null);
       }
@@ -276,21 +300,13 @@ const AirlineOffers = () => {
         files.map(async (f) => {
           const url = csvUrl(f.name);
           try {
-            console.log("[offers] loading", url);
             const res = await axios.get(url, { responseType: "text" });
             const parsed = Papa.parse(res.data, { header: true, skipEmptyLines: true });
             f.setter(parsed.data || []);
             if (f.key !== "permanent") {
               setOfferErrors((prev) => ({ ...prev, [f.key]: null }));
             }
-            console.log("[offers] loaded", f.name, { rows: (parsed.data || []).length });
           } catch (e) {
-            console.error("[offers] load error", f.name, {
-              url,
-              status: e?.response?.status,
-              statusText: e?.response?.statusText,
-              message: e?.message,
-            });
             f.setter([]);
             if (f.key !== "permanent") {
               setOfferErrors((prev) => ({ ...prev, [f.key]: e?.response?.status || "ERR" }));
@@ -343,7 +359,6 @@ const AirlineOffers = () => {
     const cc = Array.from(ccMap.values()).sort((a, b) => a.localeCompare(b));
     const dc = Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b));
 
-    console.log("[chips] built", { cc: cc.length, dc: dc.length });
     setChipCC(cc);
     setChipDC(dc);
   }, [swiggyOffers, zomatoOffers, eazyOffers, permanentOffers]);
@@ -467,7 +482,7 @@ const AirlineOffers = () => {
 
   const hasAny = Boolean(dPermanent.length || dSwiggy.length || dZomato.length || dEazy.length);
 
-  /** Offer card UI */
+  /** Offer card UI (with site logo fallbacks for Swiggy/Zomato/EazyDiner) */
   const OfferCard = ({ wrapper, isPermanent, isRetail, isZomato }) => {
     const [copied, setCopied] = useState(false);
 
@@ -486,7 +501,7 @@ const AirlineOffers = () => {
     let image = firstField(o, LIST_FIELDS.image);
     let link = firstField(o, LIST_FIELDS.link);
 
-    // Swiggy/EazyDiner
+    // Swiggy/EazyDiner (retail-style rows)
     if (isRetail) {
       title = getCI(o, "Offer") ?? title;
       desc = getCI(o, "Offer Description") ?? getCI(o, "Description") ?? desc;
@@ -494,7 +509,7 @@ const AirlineOffers = () => {
       link = getCI(o, "Link") ?? link;
     }
 
-    // Zomato
+    // Zomato specifics
     let couponCode;
     if (isZomato) {
       couponCode = getCI(o, "Coupon Code");
@@ -517,6 +532,14 @@ const AirlineOffers = () => {
       });
     };
 
+    // Decide image + fallback only for Swiggy/Zomato/EazyDiner
+    const siteKey = String(wrapper.site || "").toLowerCase();
+    const wantsFallbackLogic = ["swiggy", "zomato", "eazydiner"].includes(siteKey);
+    const { src: imgSrc, usingFallback } = wantsFallbackLogic
+      ? resolveImage(siteKey, image)
+      : { src: image, usingFallback: false };
+
+    // ZOMATO card (coupon-focused, no image needed)
     if (isZomato) {
       return (
         <div className="offer-card">
@@ -557,7 +580,14 @@ const AirlineOffers = () => {
 
     return (
       <div className="offer-card">
-        {image && <img src={image} alt={title} />}
+        {imgSrc && (
+          <img
+            className={`offer-img ${usingFallback ? "is-fallback" : ""}`}
+            src={imgSrc}
+            alt={title}
+            onError={(e) => wantsFallbackLogic && handleImgError(e, siteKey)}
+          />
+        )}
         <div className="offer-info">
           <h3 className="offer-title">{title}</h3>
 
@@ -593,7 +623,6 @@ const AirlineOffers = () => {
 
   return (
     <div className="App" style={{ fontFamily: "'Libre Baskerville', serif" }}>
-      {/* Cards-with-offers strip container */}
       {(chipCC.length > 0 || chipDC.length > 0 || anyOfferCsvMissing) && (
         <div
           style={{
@@ -620,7 +649,6 @@ const AirlineOffers = () => {
             <span>Credit And Debit Cards Which Have Offers</span>
           </div>
 
-          {/* Helpful inline note when offer CSVs are missing (why DC may be empty) */}
           {chipDC.length === 0 && anyOfferCsvMissing && (
             <div style={{ margin: "0 0 10px", color: "#b00020", textAlign: "center", fontSize: 13 }}>
               Debit-card chips are empty because one or more offer CSVs were not found:
