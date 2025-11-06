@@ -150,7 +150,7 @@ const csvUrl = (name) => `${BASE}${encodeURI(name)}`.replace(/\/{2,}/g, "/");
 /** -------------------- IMAGE FALLBACKS -------------------- */
 const FALLBACK_IMAGE_BY_SITE = {
   swiggy:
-    "https://bsmedia.business-standard.com/_media/bs/img/article/2023-07/17/full/1689574606-2001.png",
+    "https://restaurantindia.s3.ap-south-1.amazonaws.com/s3fs-public/2020-02/Swiggy.jpg",
   zomato:
     "https://c.ndtvimg.com/2024-06/mr51ho8o_zomato-logo-stock-image_625x300_03_June_24.jpg?im=FeatureCrop,algorithm=dnn,width=545,height=307",
   eazydiner:
