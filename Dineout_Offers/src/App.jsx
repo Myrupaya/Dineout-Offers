@@ -81,7 +81,8 @@ function brandCanonicalize(text) {
 function lev(a, b) {
   a = toNorm(a);
   b = toNorm(b);
-  const n = a.length, m = b.length;
+  const n = a.length,
+    m = b.length;
   if (!n) return m;
   if (!m) return n;
   const d = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
@@ -90,7 +91,11 @@ function lev(a, b) {
   for (let i = 1; i <= n; i++) {
     for (let j = 1; j <= m; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost
+      );
     }
   }
   return d[n][m];
@@ -105,9 +110,40 @@ function scoreCandidate(q, cand) {
   const qWords = qs.split(" ").filter(Boolean);
   const cWords = cs.split(" ").filter(Boolean);
 
-  const matchingWords = qWords.filter((qw) => cWords.some((cw) => cw.includes(qw))).length;
+  const matchingWords = qWords.filter((qw) =>
+    cWords.some((cw) => cw.includes(qw))
+  ).length;
   const sim = 1 - lev(qs, cs) / Math.max(qs.length, cs.length);
   return (matchingWords / Math.max(1, qWords.length)) * 0.7 + sim * 0.3;
+}
+
+/** 🔹 Generic fuzzy name matcher: handles typos like "selct", "reglia", etc. */
+function isFuzzyNameMatch(query, label) {
+  const q = toNorm(query);
+  const l = toNorm(label);
+  if (!q || !l) return false;
+
+  // direct substring
+  if (l.includes(q)) return true;
+
+  // whole-string similarity
+  const wholeDist = lev(q, l);
+  const wholeSim = 1 - wholeDist / Math.max(q.length, l.length);
+  if (wholeSim >= 0.6) return true;
+
+  // per-word similarity (e.g. "selct" ≈ "select")
+  const qWords = q.split(" ").filter(Boolean);
+  const lWords = l.split(" ").filter(Boolean);
+  for (const qw of qWords) {
+    if (qw.length < 3) continue;
+    for (const lw of lWords) {
+      if (lw.length < 3) continue;
+      const d = lev(qw, lw);
+      const sim = 1 - d / Math.max(qw.length, lw.length);
+      if (sim >= 0.7) return true;
+    }
+  }
+  return false;
 }
 
 function makeEntry(raw, type) {
@@ -363,33 +399,45 @@ const AirlineOffers = () => {
     setChipDC(Array.from(dcMap.values()).sort((a, b) => a.localeCompare(b)));
   }, [swiggyOffers, zomatoOffers, eazyOffers, permanentOffers]);
 
-  /** search box */
+  /** 🔹 UPDATED search box:
+   *  - Fuzzy match for any typo (e.g. "selct")
+   *  - "Select" cards boosted to top
+   *  - If query mentions dc/debit/debit card → show Debit section first
+   */
   const onChangeQuery = (e) => {
     const val = e.target.value;
     setQuery(val);
 
-    if (!val.trim()) {
+    const trimmed = val.trim();
+    if (!trimmed) {
       setFilteredCards([]);
       setSelected(null);
       setNoMatches(false);
       return;
     }
 
-    const q = val.trim().toLowerCase();
+    const qLower = trimmed.toLowerCase();
+
     const scored = (arr) =>
       arr
         .map((it) => {
-          const s = scoreCandidate(val, it.display);
-          const inc = it.display.toLowerCase().includes(q);
-          return { it, s, inc };
+          const baseScore = scoreCandidate(trimmed, it.display);
+          const inc = it.display.toLowerCase().includes(qLower);
+          const fuzzy = isFuzzyNameMatch(trimmed, it.display);
+
+          let s = baseScore;
+          if (inc) s += 2.0;      // strong boost for direct substring
+          if (fuzzy) s += 1.5;    // boost for typo-ish matches
+
+          return { it, s, inc, fuzzy };
         })
-        .filter(({ s, inc }) => inc || s > 0.3)
-        .sort((a, b) => (b.s - a.s) || a.it.display.localeCompare(b.it.display))
+        .filter(({ s, inc, fuzzy }) => inc || fuzzy || s > 0.3)
+        .sort((a, b) => b.s - a.s || a.it.display.localeCompare(b.it.display))
         .slice(0, MAX_SUGGESTIONS)
         .map(({ it }) => it);
 
-    const cc = scored(creditEntries);
-    const dc = scored(debitEntries);
+    let cc = scored(creditEntries);
+    let dc = scored(debitEntries);
 
     if (!cc.length && !dc.length) {
       setNoMatches(true);
@@ -398,7 +446,50 @@ const AirlineOffers = () => {
       return;
     }
 
-    const wantsDCFirst = /\b(dc|debit|debit\s*card|debit\s*cards)\b/i.test(val);
+    /** --- SPECIAL CASE 1: "select credit card" / typo like "selct" → boost Select cards first --- */
+    const qNorm = toNorm(trimmed);
+    const qWords = qNorm.split(" ").filter(Boolean);
+
+    const hasSelectWord = qWords.some((w) => {
+      if (w === "select") return true;
+      if (w.length < 3) return false;
+      const d = lev(w, "select");
+      const sim = 1 - d / Math.max(w.length, "select".length);
+      return sim >= 0.7; // "selct", "selec", "slect", etc.
+    });
+
+    const isSelectIntent =
+      qNorm.includes("select credit card") ||
+      qNorm.includes("select card") ||
+      hasSelectWord;
+
+    if (isSelectIntent) {
+      const reorderBySelect = (arr) => {
+        const selectCards = [];
+        const others = [];
+        arr.forEach((item) => {
+          const labelNorm = toNorm(item.display);
+          if (labelNorm.includes("select")) selectCards.push(item);
+          else others.push(item);
+        });
+        return [...selectCards, ...others];
+      };
+      cc = reorderBySelect(cc);
+      dc = reorderBySelect(dc);
+    }
+
+    /** --- SPECIAL CASE 2: if query hints debit/DC → show Debit section first --- */
+    const mentionsDebit =
+      qLower.includes("debit card") ||
+      qLower.includes("debit cards") ||
+      qLower.includes("debit");
+    const mentionsDC =
+      qLower === "dc" ||
+      qLower.startsWith("dc ") ||
+      qLower.endsWith(" dc") ||
+      qLower.includes(" dc ");
+
+    const wantsDCFirst = mentionsDebit || mentionsDC;
 
     setNoMatches(false);
     setFilteredCards(
