@@ -71,6 +71,25 @@ body{
   font-size:16px;
   line-height:1.65;
   margin:0 0 10px 0;
+
+  /* 🔹 NEW: Scrollable container */
+  max-height:120px;        /* adjust height as needed */
+  overflow-y:auto;
+  padding-right:6px;       /* space for scrollbar */
+}
+
+/* Optional: nice scrollbar styling */
+.offer-desc::-webkit-scrollbar {
+  width:6px;
+}
+
+.offer-desc::-webkit-scrollbar-thumb {
+  background:#ccc;
+  border-radius:6px;
+}
+
+.offer-desc::-webkit-scrollbar-thumb:hover {
+  background:#999;
 }
 
 /* permanent offers extra line */
